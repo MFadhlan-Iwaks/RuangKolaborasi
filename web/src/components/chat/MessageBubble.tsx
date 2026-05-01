@@ -1,48 +1,124 @@
-// src/components/chat/MessageBubble.tsx
-import { FileText } from 'lucide-react';
+import { Edit3, FileText, Pin, PinOff, Reply, Trash2 } from 'lucide-react';
 import { Message } from '@/types';
 
 interface MessageBubbleProps {
   message: Message;
+  onReply: (message: Message) => void;
+  onTogglePin: (messageId: number) => void;
+  onEdit: (message: Message) => void;
+  onDelete: (messageId: number) => void;
 }
 
-export default function MessageBubble({ message }: MessageBubbleProps) {
-  return (
-    <div className="flex items-start space-x-4 group">
+export default function MessageBubble({
+  message,
+  onReply,
+  onTogglePin,
+  onEdit,
+  onDelete,
+}: MessageBubbleProps) {
+  const isMine = message.user.includes('(Kamu)');
 
-      {/* Avatar */}
-      <div className={`w-10 h-10 rounded-lg shrink-0 flex items-center justify-center text-white font-bold text-sm shadow-sm ${message.avatar}`}>
+  return (
+    <div className="group flex items-start space-x-4">
+      <div
+        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-sm font-bold text-white shadow-sm ${message.avatar}`}
+      >
         {message.user.charAt(0)}
       </div>
 
-      {/* Konten */}
-      <div className="flex-1 min-w-0">
-        {/* Nama & waktu */}
-        <div className="flex items-baseline space-x-2 mb-1">
-          <span className="font-bold text-gray-900 text-sm">{message.user}</span>
-          <span className="text-xs text-gray-400 font-medium">{message.time}</span>
+      <div className="min-w-0 flex-1">
+        <div className="mb-1 flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-baseline space-x-2">
+            <span className="text-sm font-bold text-gray-900">{message.user}</span>
+            <span className="text-xs font-medium text-gray-400">{message.time}</span>
+            {message.edited && (
+              <span className="text-[10px] font-medium text-gray-400">
+                diedit
+              </span>
+            )}
+            {message.pinned && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-600">
+                <Pin size={10} />
+                Pin
+              </span>
+            )}
+          </div>
+          <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+            <button
+              type="button"
+              onClick={() => onReply(message)}
+              title="Balas pesan"
+              className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
+            >
+              <Reply size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => onTogglePin(message.id)}
+              title={message.pinned ? 'Lepas pin' : 'Pin pesan'}
+              className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-amber-50 hover:text-amber-600"
+            >
+              {message.pinned ? <PinOff size={14} /> : <Pin size={14} />}
+            </button>
+            {isMine && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onEdit(message)}
+                  title="Edit pesan"
+                  className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
+                >
+                  <Edit3 size={14} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDelete(message.id)}
+                  title="Hapus pesan"
+                  className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
-        {/* Isi pesan */}
+        {message.replyTo && (
+          <div className="mb-2 rounded-lg border-l-2 border-blue-300 bg-blue-50/60 px-3 py-2">
+            <p className="text-[11px] font-bold text-blue-700">
+              Membalas {message.replyTo.user}
+            </p>
+            <p className="mt-0.5 line-clamp-1 text-xs text-gray-500">
+              {message.replyTo.preview}
+            </p>
+          </div>
+        )}
+
         {message.type === 'text' ? (
-          <p className="text-gray-700 text-sm leading-relaxed">{message.text}</p>
+          <p className="text-sm leading-relaxed text-gray-700">{message.text}</p>
         ) : (
-          <div className="mt-2 w-72 bg-white border border-gray-200 rounded-lg p-3 flex items-start space-x-3 shadow-sm hover:shadow-md cursor-pointer transition-shadow group/file">
-            <div className="p-2 bg-blue-50 text-blue-600 rounded-lg group-hover/file:bg-blue-100 transition-colors">
-              <FileText size={24} strokeWidth={1.5} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-900 truncate">
-                {message.fileName}
+          <div className="space-y-2">
+            {message.text && (
+              <p className="text-sm leading-relaxed text-gray-700">
+                {message.text}
               </p>
-              <p className="text-xs text-gray-500 mt-0.5">
-                {message.fileSize} · Dokumen
-              </p>
+            )}
+            <div className="group/file flex w-72 cursor-pointer items-start space-x-3 rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition-shadow hover:shadow-md">
+              <div className="rounded-lg bg-blue-50 p-2 text-blue-600 transition-colors group-hover/file:bg-blue-100">
+                <FileText size={24} strokeWidth={1.5} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-gray-900">
+                  {message.fileName}
+                </p>
+                <p className="mt-0.5 text-xs text-gray-500">
+                  {message.fileSize} - Dokumen
+                </p>
+              </div>
             </div>
           </div>
         )}
       </div>
-
     </div>
   );
 }
