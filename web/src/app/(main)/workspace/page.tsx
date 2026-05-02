@@ -7,7 +7,7 @@ import {
   Loader2,
   X,
 } from 'lucide-react';
-import { FileCategory, Message, MessageFilter, Room, TeamMember, Workspace } from '@/types';
+import { FileCategory, Message, MessageFilter, Room, Status, TeamMember, Workspace } from '@/types';
 import WorkspaceSwitcher from '@/components/layout/WorkspaceSwitcher';
 import Sidebar from '@/components/layout/Sidebar';
 import MessageList from '@/components/chat/MessageList';
@@ -22,36 +22,278 @@ import InviteMemberModal from '@/components/workspace/InviteMemberModal';
 import { CreateWorkspaceModal, JoinWorkspaceModal } from '@/components/workspace/WorkspaceAccessModals';
 import WorkspaceHeader from '@/components/workspace/WorkspaceHeader';
 import WorkspaceSettingsModal from '@/components/workspace/WorkspaceSettingsModal';
-import {
-  INITIAL_MEMBERS_BY_WORKSPACE,
-  INITIAL_MESSAGES_BY_WORKSPACE,
-  INITIAL_ROOMS_BY_WORKSPACE,
-  INITIAL_WORKSPACES,
-} from '@/data/workspaceMockData';
 import { useGemini } from '@/hooks/useGemini';
 import { useDragDrop } from '@/hooks/useDragDrop';
 import {
   getFileCategory,
   getMessagePreview,
   makeInitials,
-  makeJoinedWorkspace,
-  makeSlug,
 } from '@/lib/workspaceUtils';
+import { getSupabaseBrowserClient } from '@/lib/supabaseClient';
+import { apiFetch } from '@/lib/apiClient';
 const EMPTY_MEMBERS: TeamMember[] = [];
+const WORKSPACE_COLORS = ['bg-blue-600', 'bg-emerald-600', 'bg-violet-600', 'bg-teal-600'];
+
+interface CurrentUser {
+  id: string;
+  name: string;
+  email: string;
+  initial: string;
+  avatar: string;
+  status: Status;
+}
+
+function getDisplayName(options: {
+  email?: string;
+  fullName?: string | null;
+  username?: string | null;
+  metadata?: Record<string, unknown>;
+}) {
+  const metadataName =
+    typeof options.metadata?.full_name === 'string'
+      ? options.metadata.full_name
+      : typeof options.metadata?.name === 'string'
+        ? options.metadata.name
+        : '';
+  const metadataUsername =
+    typeof options.metadata?.username === 'string'
+      ? options.metadata.username
+      : '';
+
+  return (
+    options.fullName ||
+    metadataName ||
+    options.username ||
+    metadataUsername ||
+    options.email?.split('@')[0] ||
+    'Pengguna'
+  );
+}
+
+function getReadableError(error: unknown) {
+  if (error instanceof Error) return error.message;
+
+  if (error && typeof error === 'object') {
+    const record = error as Record<string, unknown>;
+    const message = [record.message, record.details, record.hint, record.code]
+      .filter(Boolean)
+      .join(' ');
+
+    if (message) return message;
+
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return 'Terjadi error tidak dikenal.';
+    }
+  }
+
+  return String(error || 'Terjadi error tidak dikenal.');
+}
+
+interface WorkspaceRow {
+  id: string;
+  name: string;
+  description: string | null;
+  short_name?: string | null;
+  color?: string | null;
+}
+
+interface ChannelRow {
+  id: string;
+  workspace_id: string;
+  name: string;
+  description: string | null;
+  favorite?: boolean;
+  archived?: boolean;
+}
+
+interface MessageRow {
+  id: string;
+  channel_id: string;
+  sender_id: string;
+  content: string | null;
+  type: string;
+  pinned?: boolean;
+  edited?: boolean;
+  created_at: string;
+}
+
+interface BootstrapMessageRow extends MessageRow {
+  sender_name?: string | null;
+  file?: {
+    id: string;
+    file_name: string;
+    mime_type: string | null;
+    file_size: number | null;
+    signed_url: string | null;
+  } | null;
+}
+
+interface BootstrapMemberRow {
+  id: string;
+  role: 'owner' | 'admin' | 'member';
+  full_name: string;
+  email: string | null;
+  avatar_url: string | null;
+  profile_status?: Status | null;
+}
+
+interface BootstrapResponse {
+  workspaces: WorkspaceRow[];
+  roomsByWorkspace: Record<string, ChannelRow[]>;
+  messagesByWorkspace: Record<string, Record<string, BootstrapMessageRow[]>>;
+  membersByWorkspace: Record<string, BootstrapMemberRow[]>;
+}
+
+interface CreateWorkspaceResponse {
+  workspace: WorkspaceRow;
+  channel: ChannelRow;
+}
+
+interface CreateChannelResponse {
+  channel: ChannelRow;
+}
+
+interface CreateMessageResponse {
+  message: BootstrapMessageRow;
+}
+
+interface InviteMemberResponse {
+  member: BootstrapMemberRow;
+}
+
+interface JoinWorkspaceResponse {
+  workspace: WorkspaceRow;
+  channel: ChannelRow;
+}
+
+interface UpdateWorkspaceResponse {
+  workspace: WorkspaceRow;
+}
+
+interface UpdateChannelResponse {
+  channel: ChannelRow;
+}
+
+interface EnsureProfileResponse {
+  profile: {
+    id: string;
+    status?: Status | null;
+  };
+}
+
+function toWorkspace(row: WorkspaceRow, index: number): Workspace {
+  return {
+    id: row.id,
+    name: row.name,
+    shortName: row.short_name || makeInitials(row.name),
+    description: row.description || 'Workspace kolaborasi tim.',
+    color: row.color || WORKSPACE_COLORS[index % WORKSPACE_COLORS.length],
+    inviteCode: row.id.slice(0, 8).toUpperCase(),
+  };
+}
+
+function toRoom(row: ChannelRow): Room {
+  return {
+    id: row.id,
+    name: row.name,
+    icon: 'message',
+    description: row.description || `Ruang diskusi untuk ${row.name}.`,
+    favorite: !!row.favorite,
+    archived: !!row.archived,
+  };
+}
+
+function toMessage(row: BootstrapMessageRow, currentUser: CurrentUser): Message {
+  const isMine = row.sender_id === currentUser.id;
+  const createdAt = new Date(row.created_at);
+
+  return {
+    id: row.id,
+    user: isMine ? `${currentUser.name} (Kamu)` : row.sender_name || 'Anggota',
+    avatar: isMine ? currentUser.avatar : 'bg-slate-500',
+    time: createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    type: row.type === 'file' || row.type === 'image' ? 'file' : 'text',
+    text: row.content || undefined,
+    fileName: row.file?.file_name,
+    fileSize: row.file?.file_size
+      ? `${(row.file.file_size / 1024).toFixed(2)} KB`
+      : undefined,
+    fileUrl: row.file?.signed_url || undefined,
+    mimeType: row.file?.mime_type || undefined,
+    pinned: !!row.pinned,
+    edited: !!row.edited,
+  };
+}
+
+function toMember(row: BootstrapMemberRow, currentUser: CurrentUser): TeamMember {
+  const isMine = row.id === currentUser.id;
+
+  return {
+    id: row.id,
+    name: isMine ? currentUser.name : row.full_name || 'Anggota',
+    email: isMine ? currentUser.email : row.email || 'anggota@workspace.local',
+    role:
+      row.role === 'owner' ? 'Owner' : row.role === 'admin' ? 'Admin' : 'Member',
+    status: 'active',
+    avatar: isMine ? currentUser.avatar : 'bg-slate-500',
+    profileStatus: isMine ? currentUser.status : row.profile_status || 'online',
+  };
+}
+
+async function ensureProfile(accessToken: string, currentUser: CurrentUser) {
+  return apiFetch<EnsureProfileResponse>('/api/auth/ensure-profile', {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify({
+      fullName: currentUser.name,
+      username: currentUser.email.split('@')[0],
+    }),
+  });
+}
+
+async function getAccessToken() {
+  const supabase = getSupabaseBrowserClient();
+  const { data, error } = await supabase.auth.getSession();
+
+  if (error) throw error;
+
+  const token = data.session?.access_token;
+
+  if (!token) {
+    throw new Error('Session tidak ditemukan. Silakan login ulang.');
+  }
+
+  return token;
+}
+
+function readFileAsBase64(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const result = String(reader.result || '');
+      resolve(result.includes(',') ? result.split(',')[1] : result);
+    };
+    reader.onerror = () => reject(reader.error || new Error('Gagal membaca file.'));
+    reader.readAsDataURL(file);
+  });
+}
 
 export default function WorkspacePage() {
-  const [workspaces, setWorkspaces] = useState<Workspace[]>(INITIAL_WORKSPACES);
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState('tugas-besar-pabp');
-  const [activeRoomId, setActiveRoomId] = useState('diskusi-utama');
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState('');
+  const [activeRoomId, setActiveRoomId] = useState('');
   const [roomsByWorkspace, setRoomsByWorkspace] = useState<Record<string, Room[]>>(
-    INITIAL_ROOMS_BY_WORKSPACE
+    {}
   );
   const [messagesByWorkspace, setMessagesByWorkspace] = useState<
     Record<string, Record<string, Message[]>>
-  >(INITIAL_MESSAGES_BY_WORKSPACE);
+  >({});
   const [membersByWorkspace, setMembersByWorkspace] = useState<
     Record<string, TeamMember[]>
-  >(INITIAL_MEMBERS_BY_WORKSPACE);
+  >({});
   const [showChannelModal, setShowChannelModal] = useState(false);
   const [showChannelSettings, setShowChannelSettings] = useState(false);
   const [showDeleteChannelModal, setShowDeleteChannelModal] = useState(false);
@@ -75,20 +317,29 @@ export default function WorkspacePage() {
     null
   );
   const [fileNotice, setFileNotice] = useState('');
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [workspaceError, setWorkspaceError] = useState('');
 
   const { summarize, isSummarizing, summaryResult, clearSummary } = useGemini();
   const { isDragging, dragHandlers } = useDragDrop({ onFileDrop: handleFileDrop });
+  const currentUserName = currentUser?.name ?? 'Kamu';
+  const currentUserEmail = currentUser?.email ?? 'user@local.test';
+  const currentUserInitial = currentUser?.initial ?? 'K';
+  const currentUserAvatar = currentUser?.avatar ?? 'bg-indigo-600';
+  const currentUserStatus = currentUser?.status ?? 'online';
+  const currentUserId = currentUser?.id ?? '';
 
   const activeWorkspace =
     workspaces.find((workspace) => workspace.id === activeWorkspaceId) ??
-    INITIAL_WORKSPACES[0];
+    workspaces[0];
   const rooms = roomsByWorkspace[activeWorkspaceId] ?? [];
   const members = membersByWorkspace[activeWorkspaceId] ?? EMPTY_MEMBERS;
   const activeRoom = rooms.find((room) => room.id === activeRoomId) ?? rooms[0];
   const messages =
     messagesByWorkspace[activeWorkspaceId]?.[activeRoom?.id ?? ''] ?? [];
   const typingMemberName =
-    members.find((member) => member.status === 'active' && member.name !== 'Fadhlan')
+    members.find((member) => member.status === 'active' && member.name !== currentUserName)
       ?.name ?? '';
   const pinnedMessages = messages.filter((message) => message.pinned);
   const channelFiles = messages.filter((message) => message.type === 'file');
@@ -117,6 +368,206 @@ export default function WorkspacePage() {
       .filter(Boolean)
       .some((value) => value?.toLowerCase().includes(query));
   });
+
+  async function loadWorkspaceData(currentUser: CurrentUser, accessToken: string) {
+    const payload = await apiFetch<BootstrapResponse>('/api/workspaces/bootstrap', {
+      accessToken,
+    });
+
+    const nextWorkspaces = payload.workspaces.map(toWorkspace);
+    const nextRoomsByWorkspace: Record<string, Room[]> = {};
+    const nextMessagesByWorkspace: Record<string, Record<string, Message[]>> = {};
+    const nextMembersByWorkspace: Record<string, TeamMember[]> = {};
+
+    for (const workspace of payload.workspaces) {
+      const nextChannelRows = payload.roomsByWorkspace[workspace.id] || [];
+      nextRoomsByWorkspace[workspace.id] = nextChannelRows.map(toRoom);
+      nextMembersByWorkspace[workspace.id] = (payload.membersByWorkspace[workspace.id] || []).map(
+        (member) => toMember(member, currentUser)
+      );
+      nextMessagesByWorkspace[workspace.id] = {};
+
+      for (const channel of nextChannelRows) {
+        nextMessagesByWorkspace[workspace.id][channel.id] = (
+          payload.messagesByWorkspace[workspace.id]?.[channel.id] || []
+        ).map(
+          (message) => toMessage(message, currentUser)
+        );
+      }
+    }
+
+    setWorkspaces(nextWorkspaces);
+    setRoomsByWorkspace(nextRoomsByWorkspace);
+    setMessagesByWorkspace(nextMessagesByWorkspace);
+    setMembersByWorkspace(nextMembersByWorkspace);
+    setActiveWorkspaceId(nextWorkspaces[0]?.id ?? '');
+    setActiveRoomId(nextRoomsByWorkspace[nextWorkspaces[0]?.id ?? '']?.[0]?.id ?? '');
+  }
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadCurrentUser() {
+      try {
+        const supabase = getSupabaseBrowserClient();
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+
+        if (sessionError) throw sessionError;
+
+        const user = sessionData.session?.user;
+        const accessToken = sessionData.session?.access_token;
+
+        if (!user || !accessToken) {
+          window.location.replace('/login');
+          return;
+        }
+
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name, username, avatar_url, status')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        const name = getDisplayName({
+          email: user.email,
+          fullName: profile?.full_name,
+          username: profile?.username,
+          metadata: user.user_metadata,
+        });
+        const nextCurrentUser: CurrentUser = {
+          id: user.id,
+          name,
+          email: user.email ?? '',
+          initial: makeInitials(name).slice(0, 2) || 'U',
+          avatar: 'bg-indigo-600',
+          status: (profile?.status as Status | null) || 'online',
+        };
+
+        if (!isMounted) return;
+
+        const { profile: ensuredProfile } = await ensureProfile(accessToken, nextCurrentUser);
+        const currentUserWithStatus = {
+          ...nextCurrentUser,
+          status: ensuredProfile.status || nextCurrentUser.status,
+        };
+
+        setCurrentUser(currentUserWithStatus);
+        await loadWorkspaceData(currentUserWithStatus, accessToken);
+      } catch (error) {
+        const readableError = getReadableError(error);
+
+        console.error('Gagal memuat user workspace:', readableError, error);
+        if (!isMounted) return;
+
+        setWorkspaceError(readableError);
+      } finally {
+        if (isMounted) setIsAuthLoading(false);
+      }
+    }
+
+    loadCurrentUser();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!activeRoomId || !activeWorkspaceId || !currentUser) return undefined;
+
+    const supabase = getSupabaseBrowserClient();
+    const channel = supabase
+      .channel(`room-messages:${activeRoomId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `channel_id=eq.${activeRoomId}`,
+        },
+        async (payload) => {
+          const row = payload.new as BootstrapMessageRow;
+
+          if (row.type === 'file' || row.type === 'image') {
+            try {
+              await loadWorkspaceData(currentUser, await getAccessToken());
+            } catch (error) {
+              console.error('Gagal memuat ulang file message:', getReadableError(error), error);
+            }
+            return;
+          }
+
+          const nextMessage = toMessage(row, currentUser);
+
+          setMessagesByWorkspace((prev) => {
+            const currentMessages = prev[activeWorkspaceId]?.[activeRoomId] ?? [];
+
+            if (currentMessages.some((message) => message.id === nextMessage.id)) {
+              return prev;
+            }
+
+            return {
+              ...prev,
+              [activeWorkspaceId]: {
+                ...(prev[activeWorkspaceId] ?? {}),
+                [activeRoomId]: [...currentMessages, nextMessage],
+              },
+            };
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeRoomId, activeWorkspaceId, currentUser]);
+
+  useEffect(() => {
+    if (!currentUserId) return undefined;
+
+    const supabase = getSupabaseBrowserClient();
+    const channel = supabase
+      .channel('profile-status-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
+        },
+        (payload) => {
+          const profile = payload.new as { id?: string; status?: Status };
+
+          if (!profile.id || !profile.status) return;
+
+          if (profile.id === currentUserId) {
+            setCurrentUser((prev) =>
+              prev ? { ...prev, status: profile.status as Status } : prev
+            );
+          }
+
+          setMembersByWorkspace((prev) =>
+            Object.fromEntries(
+              Object.entries(prev).map(([workspaceId, workspaceMembers]) => [
+                workspaceId,
+                workspaceMembers.map((member) =>
+                  member.id === profile.id
+                    ? { ...member, profileStatus: profile.status }
+                    : member
+                ),
+              ])
+            )
+          );
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUserId]);
 
   useEffect(() => {
     const startTimeout = window.setTimeout(
@@ -148,37 +599,177 @@ export default function WorkspacePage() {
     setDraftFile(file);
   }
 
-  function handleSendMessage(text: string, file?: File) {
-    if (!activeRoom) return;
+  async function handleStatusChange(status: Status) {
+    if (!currentUser) return;
 
-    const newMessage: Message = {
-      id: Date.now(),
-      user: 'Fadhlan (Kamu)',
-      avatar: 'bg-indigo-600',
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      type: file ? 'file' : 'text',
-      text: text || undefined,
-      fileName: file?.name,
-      fileSize: file ? `${(file.size / 1024).toFixed(2)} KB` : undefined,
-      replyTo: replyToMessage
-        ? {
-            user: replyToMessage.user,
-            preview: getMessagePreview(replyToMessage),
-          }
-        : undefined,
-    };
+    const previousStatus = currentUser.status;
 
+    setCurrentUser((prev) => (prev ? { ...prev, status } : prev));
+    setMembersByWorkspace((prev) =>
+      Object.fromEntries(
+        Object.entries(prev).map(([workspaceId, workspaceMembers]) => [
+          workspaceId,
+          workspaceMembers.map((member) =>
+            member.id === currentUser.id ? { ...member, profileStatus: status } : member
+          ),
+        ])
+      )
+    );
+
+    try {
+      await apiFetch('/api/auth/status', {
+        method: 'PATCH',
+        accessToken: await getAccessToken(),
+        body: JSON.stringify({ status }),
+      });
+    } catch (error) {
+      console.error('Gagal mengubah status:', getReadableError(error), error);
+      setCurrentUser((prev) => (prev ? { ...prev, status: previousStatus } : prev));
+      setMembersByWorkspace((prev) =>
+        Object.fromEntries(
+          Object.entries(prev).map(([workspaceId, workspaceMembers]) => [
+            workspaceId,
+            workspaceMembers.map((member) =>
+              member.id === currentUser.id
+                ? { ...member, profileStatus: previousStatus }
+                : member
+            ),
+          ])
+        )
+      );
+    }
+  }
+
+  async function handleSendMessage(text: string, file?: File) {
+    if (!activeRoom || !currentUser) return;
+
+    try {
+      const accessToken = await getAccessToken();
+      const { message } = file
+        ? await apiFetch<CreateMessageResponse>(
+            `/api/workspaces/channels/${activeRoom.id}/files`,
+            {
+              method: 'POST',
+              accessToken,
+              body: JSON.stringify({
+                fileName: file.name,
+                mimeType: file.type || 'application/octet-stream',
+                fileSize: file.size,
+                contentBase64: await readFileAsBase64(file),
+                caption: text,
+              }),
+            }
+          )
+        : await apiFetch<CreateMessageResponse>(
+            `/api/workspaces/channels/${activeRoom.id}/messages`,
+            {
+              method: 'POST',
+              accessToken,
+              body: JSON.stringify({
+                content: text,
+                type: 'text',
+              }),
+            }
+          );
+
+      const nextMessage = toMessage(message, currentUser);
+
+      setMessagesByWorkspace((prev) => {
+        const currentMessages = prev[activeWorkspaceId]?.[activeRoom.id] ?? [];
+
+        if (currentMessages.some((item) => item.id === nextMessage.id)) {
+          return prev;
+        }
+
+        return {
+          ...prev,
+          [activeWorkspaceId]: {
+            ...(prev[activeWorkspaceId] ?? {}),
+            [activeRoom.id]: [...currentMessages, nextMessage],
+          },
+        };
+      });
+
+      setReplyToMessage(null);
+      setDraftFile(null);
+    } catch (error) {
+      console.error('Gagal mengirim pesan:', getReadableError(error), error);
+    }
+  }
+
+  async function createChannelInBackend(trimmedName: string, description: string, currentRooms: Room[]) {
+    const accessToken = await getAccessToken();
+    const { channel } = await apiFetch<CreateChannelResponse>(
+      `/api/workspaces/${activeWorkspaceId}/channels`,
+      {
+        method: 'POST',
+        accessToken,
+        body: JSON.stringify({
+          name: trimmedName,
+          description: description.trim() || `Ruang diskusi untuk ${trimmedName}.`,
+        }),
+      }
+    );
+
+    const newRoom = toRoom(channel);
+
+    setRoomsByWorkspace((prev) => ({
+      ...prev,
+      [activeWorkspaceId]: [...currentRooms, newRoom],
+    }));
     setMessagesByWorkspace((prev) => ({
       ...prev,
       [activeWorkspaceId]: {
         ...(prev[activeWorkspaceId] ?? {}),
-        [activeRoom.id]: [
-          ...(prev[activeWorkspaceId]?.[activeRoom.id] ?? []),
-          newMessage,
-        ],
+        [newRoom.id]: [],
       },
     }));
-    setReplyToMessage(null);
+    setActiveRoomId(newRoom.id);
+    setShowChannelModal(false);
+  }
+
+  async function createWorkspaceInBackend(name: string, description: string) {
+    if (!currentUser) return;
+
+    const accessToken = await getAccessToken();
+    const { workspace, channel } = await apiFetch<CreateWorkspaceResponse>('/api/workspaces', {
+      method: 'POST',
+      accessToken,
+      body: JSON.stringify({
+        name,
+        description,
+      }),
+    });
+
+    const nextWorkspace = toWorkspace(workspace, workspaces.length);
+    const firstRoom = toRoom(channel);
+
+    setWorkspaces((prev) => [...prev, nextWorkspace]);
+    setRoomsByWorkspace((prev) => ({
+      ...prev,
+      [workspace.id]: [firstRoom],
+    }));
+    setMessagesByWorkspace((prev) => ({
+      ...prev,
+      [workspace.id]: { [firstRoom.id]: [] },
+    }));
+    setMembersByWorkspace((prev) => ({
+      ...prev,
+      [workspace.id]: [
+        {
+          id: currentUser.id,
+          name: currentUserName,
+          email: currentUserEmail,
+          role: 'Owner',
+          status: 'active',
+          avatar: currentUserAvatar,
+          profileStatus: currentUserStatus,
+        },
+      ],
+    }));
+    setWorkspaceModal(null);
+    setActiveWorkspaceId(workspace.id);
+    setActiveRoomId(firstRoom.id);
   }
 
   function updateCurrentRoomMessages(updater: (messages: Message[]) => Message[]) {
@@ -193,24 +784,48 @@ export default function WorkspacePage() {
     }));
   }
 
-  function handleTogglePin(messageId: number) {
-    updateCurrentRoomMessages((currentMessages) =>
-      currentMessages.map((message) =>
-        message.id === messageId
-          ? { ...message, pinned: !message.pinned }
-          : message
-      )
-    );
+  async function handleTogglePin(messageId: Message['id']) {
+    const targetMessage = messages.find((message) => message.id === messageId);
+    if (!targetMessage) return;
+
+    const nextPinned = !targetMessage.pinned;
+
+    try {
+      await apiFetch(`/api/workspaces/messages/${messageId}`, {
+        method: 'PATCH',
+        accessToken: await getAccessToken(),
+        body: JSON.stringify({ pinned: nextPinned }),
+      });
+
+      updateCurrentRoomMessages((currentMessages) =>
+        currentMessages.map((message) =>
+          message.id === messageId
+            ? { ...message, pinned: nextPinned }
+            : message
+        )
+      );
+    } catch (error) {
+      console.error('Gagal mengubah pin pesan:', getReadableError(error), error);
+    }
   }
 
-  function handleDeleteMessage(messageId: number) {
-    updateCurrentRoomMessages((currentMessages) =>
-      currentMessages.filter((message) => message.id !== messageId)
-    );
+  async function handleDeleteMessage(messageId: Message['id']) {
+    try {
+      await apiFetch(`/api/workspaces/messages/${messageId}`, {
+        method: 'DELETE',
+        accessToken: await getAccessToken(),
+      });
 
-    if (replyToMessage?.id === messageId) setReplyToMessage(null);
-    if (editingMessage?.id === messageId) {
-      setEditingMessage(null);
+      updateCurrentRoomMessages((currentMessages) =>
+        currentMessages.filter((message) => message.id !== messageId)
+      );
+
+      if (replyToMessage?.id === messageId) setReplyToMessage(null);
+      if (editingMessage?.id === messageId) {
+        setEditingMessage(null);
+      }
+    } catch (error) {
+      console.error('Gagal menghapus pesan:', getReadableError(error), error);
     }
   }
 
@@ -218,57 +833,106 @@ export default function WorkspacePage() {
     setEditingMessage(message);
   }
 
-  function handleSaveEdit(messageToEdit: Message, text: string) {
-    updateCurrentRoomMessages((currentMessages) =>
-      currentMessages.map((message) =>
-        message.id === messageToEdit.id
-          ? { ...message, text: text.trim() || undefined, edited: true }
-          : message
-      )
-    );
-    setEditingMessage(null);
+  async function handleSaveEdit(messageToEdit: Message, text: string) {
+    try {
+      await apiFetch(`/api/workspaces/messages/${messageToEdit.id}`, {
+        method: 'PATCH',
+        accessToken: await getAccessToken(),
+        body: JSON.stringify({ content: text }),
+      });
+
+      updateCurrentRoomMessages((currentMessages) =>
+        currentMessages.map((message) =>
+          message.id === messageToEdit.id
+            ? { ...message, text: text.trim() || undefined, edited: true }
+            : message
+        )
+      );
+      setEditingMessage(null);
+    } catch (error) {
+      console.error('Gagal mengedit pesan:', getReadableError(error), error);
+    }
   }
 
   function handleMockDownload(message: Message) {
-    setFileNotice(`${message.fileName} siap diunduh (simulasi frontend).`);
+    if (message.fileUrl) {
+      window.open(message.fileUrl, '_blank', 'noopener,noreferrer');
+      setFileNotice(`${message.fileName} dibuka di tab baru.`);
+      window.setTimeout(() => setFileNotice(''), 2200);
+      return;
+    }
+
+    setFileNotice(`${message.fileName} belum memiliki URL download.`);
     window.setTimeout(() => setFileNotice(''), 2200);
   }
 
-  function handleUpdateWorkspace(
+  async function handleUpdateWorkspace(
     updates: Pick<Workspace, 'name' | 'shortName' | 'description' | 'color'>
   ) {
-    setWorkspaces((prev) =>
-      prev.map((workspace) =>
-        workspace.id === activeWorkspaceId
-          ? { ...workspace, ...updates }
-          : workspace
-      )
-    );
-    setShowWorkspaceSettings(false);
+    try {
+      const { workspace } = await apiFetch<UpdateWorkspaceResponse>(
+        `/api/workspaces/${activeWorkspaceId}`,
+        {
+          method: 'PATCH',
+          accessToken: await getAccessToken(),
+          body: JSON.stringify(updates),
+        }
+      );
+      const nextWorkspace = toWorkspace(
+        workspace,
+        workspaces.findIndex((item) => item.id === activeWorkspaceId)
+      );
+
+      setWorkspaces((prev) =>
+        prev.map((item) =>
+          item.id === activeWorkspaceId
+            ? { ...item, ...nextWorkspace, shortName: updates.shortName }
+            : item
+        )
+      );
+      setShowWorkspaceSettings(false);
+    } catch (error) {
+      console.error('Gagal mengubah workspace:', getReadableError(error), error);
+    }
   }
 
-  function handleLeaveWorkspace() {
-    if (workspaces.length <= 1) return;
+  async function handleLeaveWorkspace() {
+    try {
+      const accessToken = await getAccessToken();
+      await apiFetch(`/api/workspaces/${activeWorkspaceId}/leave`, {
+        method: 'DELETE',
+        accessToken,
+      });
 
-    const remainingWorkspaces = workspaces.filter(
-      (workspace) => workspace.id !== activeWorkspaceId
-    );
-    const nextWorkspaceId = remainingWorkspaces[0]?.id;
-    const nextRoomId = nextWorkspaceId
-      ? roomsByWorkspace[nextWorkspaceId]?.[0]?.id ?? ''
-      : '';
+      const remainingWorkspaces = workspaces.filter(
+        (workspace) => workspace.id !== activeWorkspaceId
+      );
 
-    setWorkspaces(remainingWorkspaces);
-    setActiveWorkspaceId(nextWorkspaceId ?? '');
-    setActiveRoomId(nextRoomId);
-    setDraftFile(null);
-    setReplyToMessage(null);
-    setSearchQuery('');
-    setMessageFilter('all');
-    setFileCategory('all');
-    setSelectedFileMessage(null);
-    setShowWorkspaceSettings(false);
-    clearSummary();
+      if (remainingWorkspaces.length === 0 && currentUser) {
+        await loadWorkspaceData(currentUser, accessToken);
+        setShowWorkspaceSettings(false);
+        return;
+      }
+
+      const nextWorkspaceId = remainingWorkspaces[0]?.id;
+      const nextRoomId = nextWorkspaceId
+        ? roomsByWorkspace[nextWorkspaceId]?.[0]?.id ?? ''
+        : '';
+
+      setWorkspaces(remainingWorkspaces);
+      setActiveWorkspaceId(nextWorkspaceId ?? '');
+      setActiveRoomId(nextRoomId);
+      setDraftFile(null);
+      setReplyToMessage(null);
+      setSearchQuery('');
+      setMessageFilter('all');
+      setFileCategory('all');
+      setSelectedFileMessage(null);
+      setShowWorkspaceSettings(false);
+      clearSummary();
+    } catch (error) {
+      console.error('Gagal keluar/menghapus workspace:', getReadableError(error), error);
+    }
   }
 
   function handleCreateChannel(name: string, description: string) {
@@ -276,31 +940,10 @@ export default function WorkspacePage() {
     if (!trimmedName) return;
 
     const currentRooms = roomsByWorkspace[activeWorkspaceId] ?? [];
-    const baseId = makeSlug(trimmedName) || `channel-${Date.now()}`;
-    const id = currentRooms.some((room) => room.id === baseId)
-      ? `${baseId}-${Date.now().toString().slice(-4)}`
-      : baseId;
 
-    const newRoom: Room = {
-      id,
-      name: trimmedName,
-      icon: 'folder',
-      description: description.trim() || `Ruang diskusi untuk ${trimmedName}.`,
-    };
-
-    setRoomsByWorkspace((prev) => ({
-      ...prev,
-      [activeWorkspaceId]: [...currentRooms, newRoom],
-    }));
-    setMessagesByWorkspace((prev) => ({
-      ...prev,
-      [activeWorkspaceId]: {
-        ...(prev[activeWorkspaceId] ?? {}),
-        [id]: [],
-      },
-    }));
-    setActiveRoomId(id);
-    setShowChannelModal(false);
+    createChannelInBackend(trimmedName, description, currentRooms).catch((error) => {
+      console.error('Gagal membuat channel:', getReadableError(error), error);
+    });
   }
 
   function updateCurrentWorkspaceRooms(updater: (rooms: Room[]) => Room[]) {
@@ -310,28 +953,59 @@ export default function WorkspacePage() {
     }));
   }
 
-  function handleToggleFavoriteChannel(roomId: string) {
-    updateCurrentWorkspaceRooms((currentRooms) =>
-      currentRooms.map((room) =>
-        room.id === roomId ? { ...room, favorite: !room.favorite } : room
-      )
-    );
+  async function handleToggleFavoriteChannel(roomId: string) {
+    const targetRoom = rooms.find((room) => room.id === roomId);
+    if (!targetRoom) return;
+
+    try {
+      const { channel } = await apiFetch<UpdateChannelResponse>(
+        `/api/workspaces/channels/${roomId}`,
+        {
+          method: 'PATCH',
+          accessToken: await getAccessToken(),
+          body: JSON.stringify({ favorite: !targetRoom.favorite }),
+        }
+      );
+
+      const nextRoom = toRoom(channel);
+      updateCurrentWorkspaceRooms((currentRooms) =>
+        currentRooms.map((room) =>
+          room.id === roomId ? { ...room, ...nextRoom } : room
+        )
+      );
+    } catch (error) {
+      console.error('Gagal mengubah favorit channel:', getReadableError(error), error);
+    }
   }
 
-  function handleUpdateChannel(
+  async function handleUpdateChannel(
     updates: Pick<Room, 'name' | 'description' | 'favorite'>
   ) {
     if (!activeRoom) return;
 
-    updateCurrentWorkspaceRooms((currentRooms) =>
-      currentRooms.map((room) =>
-        room.id === activeRoom.id ? { ...room, ...updates } : room
-      )
-    );
-    setShowChannelSettings(false);
+    try {
+      const { channel } = await apiFetch<UpdateChannelResponse>(
+        `/api/workspaces/channels/${activeRoom.id}`,
+        {
+          method: 'PATCH',
+          accessToken: await getAccessToken(),
+          body: JSON.stringify(updates),
+        }
+      );
+
+      const nextRoom = toRoom(channel);
+      updateCurrentWorkspaceRooms((currentRooms) =>
+        currentRooms.map((room) =>
+          room.id === activeRoom.id ? { ...room, ...nextRoom } : room
+        )
+      );
+      setShowChannelSettings(false);
+    } catch (error) {
+      console.error('Gagal mengubah channel:', getReadableError(error), error);
+    }
   }
 
-  function handleToggleArchiveChannel() {
+  async function handleToggleArchiveChannel() {
     if (!activeRoom) return;
 
     const nextArchivedState = !activeRoom.archived;
@@ -340,19 +1014,30 @@ export default function WorkspacePage() {
         activeRoom.id
       : activeRoom.id;
 
-    updateCurrentWorkspaceRooms((currentRooms) =>
-      currentRooms.map((room) =>
-        room.id === activeRoom.id
-          ? {
-              ...room,
-              archived: nextArchivedState,
-              favorite: nextArchivedState ? false : room.favorite,
-            }
-          : room
-      )
-    );
-    setActiveRoomId(nextActiveRoomId);
-    setShowChannelSettings(false);
+    try {
+      const { channel } = await apiFetch<UpdateChannelResponse>(
+        `/api/workspaces/channels/${activeRoom.id}`,
+        {
+          method: 'PATCH',
+          accessToken: await getAccessToken(),
+          body: JSON.stringify({
+            archived: nextArchivedState,
+            favorite: nextArchivedState ? false : activeRoom.favorite,
+          }),
+        }
+      );
+
+      const nextRoom = toRoom(channel);
+      updateCurrentWorkspaceRooms((currentRooms) =>
+        currentRooms.map((room) =>
+          room.id === activeRoom.id ? { ...room, ...nextRoom } : room
+        )
+      );
+      setActiveRoomId(nextActiveRoomId);
+      setShowChannelSettings(false);
+    } catch (error) {
+      console.error('Gagal mengarsipkan channel:', getReadableError(error), error);
+    }
   }
 
   function openDeleteChannelModal() {
@@ -360,40 +1045,49 @@ export default function WorkspacePage() {
     setShowDeleteChannelModal(true);
   }
 
-  function handleConfirmDeleteChannel() {
+  async function handleConfirmDeleteChannel() {
     if (!deleteConfirmRoomId) return;
 
-    const remainingRooms = rooms.filter((room) => room.id !== deleteConfirmRoomId);
-    const nextActiveRoomId =
-      activeRoomId === deleteConfirmRoomId
-        ? remainingRooms.find((room) => !room.archived)?.id ??
-          remainingRooms[0]?.id ??
-          ''
-        : activeRoomId;
+    try {
+      await apiFetch(`/api/workspaces/channels/${deleteConfirmRoomId}`, {
+        method: 'DELETE',
+        accessToken: await getAccessToken(),
+      });
 
-    setRoomsByWorkspace((prev) => ({
-      ...prev,
-      [activeWorkspaceId]: remainingRooms,
-    }));
+      const remainingRooms = rooms.filter((room) => room.id !== deleteConfirmRoomId);
+      const nextActiveRoomId =
+        activeRoomId === deleteConfirmRoomId
+          ? remainingRooms.find((room) => !room.archived)?.id ??
+            remainingRooms[0]?.id ??
+            ''
+          : activeRoomId;
 
-    setMessagesByWorkspace((prev) => {
-      const nextWorkspaceMessages = { ...(prev[activeWorkspaceId] ?? {}) };
-      delete nextWorkspaceMessages[deleteConfirmRoomId];
-
-      return {
+      setRoomsByWorkspace((prev) => ({
         ...prev,
-        [activeWorkspaceId]: nextWorkspaceMessages,
-      };
-    });
+        [activeWorkspaceId]: remainingRooms,
+      }));
 
-    setActiveRoomId(nextActiveRoomId);
-    setDraftFile(null);
-    setDeleteConfirmRoomId('');
-    setShowDeleteChannelModal(false);
-    clearSummary();
+      setMessagesByWorkspace((prev) => {
+        const nextWorkspaceMessages = { ...(prev[activeWorkspaceId] ?? {}) };
+        delete nextWorkspaceMessages[deleteConfirmRoomId];
+
+        return {
+          ...prev,
+          [activeWorkspaceId]: nextWorkspaceMessages,
+        };
+      });
+
+      setActiveRoomId(nextActiveRoomId);
+      setDraftFile(null);
+      setDeleteConfirmRoomId('');
+      setShowDeleteChannelModal(false);
+      clearSummary();
+    } catch (error) {
+      console.error('Gagal menghapus channel:', getReadableError(error), error);
+    }
   }
 
-  function handleInviteMember(emailInput: string, role: TeamMember['role']) {
+  async function handleInviteMember(emailInput: string, role: TeamMember['role']) {
     const email = emailInput.trim().toLowerCase();
     const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
@@ -407,80 +1101,57 @@ export default function WorkspacePage() {
       return;
     }
 
-    const name = email.split('@')[0].replace(/[._-]+/g, ' ');
-    const displayName = name.replace(/\b\w/g, (char) => char.toUpperCase());
-
-    setMembersByWorkspace((prev) => ({
-      ...prev,
-      [activeWorkspaceId]: [
-        ...(prev[activeWorkspaceId] ?? []),
+    try {
+      const accessToken = await getAccessToken();
+      const { member } = await apiFetch<InviteMemberResponse>(
+        `/api/workspaces/${activeWorkspaceId}/invite`,
         {
-          id: `${activeWorkspaceId}-${email}-${Date.now()}`,
-          name: displayName,
-          email,
-          role,
-          status: 'pending',
-          avatar: 'bg-fuchsia-500',
-        },
-      ],
-    }));
-    setInviteMessage(`Undangan untuk ${email} berhasil dibuat.`);
+          method: 'POST',
+          accessToken,
+          body: JSON.stringify({
+            email,
+            role,
+          }),
+        }
+      );
+
+      const nextMember = toMember(member, currentUser ?? {
+        id: '',
+        name: currentUserName,
+        email: currentUserEmail,
+        initial: currentUserInitial,
+        avatar: currentUserAvatar,
+        status: currentUserStatus,
+      });
+
+      setMembersByWorkspace((prev) => {
+        const currentMembers = prev[activeWorkspaceId] ?? [];
+        const withoutDuplicate = currentMembers.filter((item) => item.id !== nextMember.id);
+
+        return {
+          ...prev,
+          [activeWorkspaceId]: [...withoutDuplicate, nextMember],
+        };
+      });
+      setInviteMessage(`${email} berhasil ditambahkan ke workspace.`);
+    } catch (error) {
+      setInviteMessage(getReadableError(error));
+    }
   }
 
   function handleCreateWorkspace(name: string, description: string) {
     const trimmedName = name.trim();
     if (!trimmedName) return;
 
-    const baseId = makeSlug(trimmedName) || `workspace-${Date.now()}`;
-    const id = workspaces.some((workspace) => workspace.id === baseId)
-      ? `${baseId}-${Date.now().toString().slice(-4)}`
-      : baseId;
-    const firstRoomId = 'diskusi-umum';
-    const newWorkspace: Workspace = {
-      id,
-      name: trimmedName,
-      shortName: makeInitials(trimmedName),
-      description:
-        description.trim() || `Workspace untuk kolaborasi ${trimmedName}.`,
-      color: 'bg-teal-600',
-      inviteCode: `${makeInitials(trimmedName)}-${Date.now().toString().slice(-4)}`,
-    };
-
-    setWorkspaces((prev) => [...prev, newWorkspace]);
-    setRoomsByWorkspace((prev) => ({
-      ...prev,
-      [id]: [
-        {
-          id: firstRoomId,
-          name: 'Diskusi Umum',
-          icon: 'message',
-          description: 'Ruang awal untuk koordinasi grup.',
-        },
-      ],
-    }));
-    setMessagesByWorkspace((prev) => ({
-      ...prev,
-      [id]: { [firstRoomId]: [] },
-    }));
-    setMembersByWorkspace((prev) => ({
-      ...prev,
-      [id]: [
-        {
-          id: `${id}-owner`,
-          name: 'Fadhlan',
-          email: 'fadhlan@kampus.ac.id',
-          role: 'Owner',
-          status: 'active',
-          avatar: 'bg-indigo-600',
-        },
-      ],
-    }));
-    setWorkspaceModal(null);
-    setActiveWorkspaceId(id);
-    setActiveRoomId(firstRoomId);
+    createWorkspaceInBackend(
+      trimmedName,
+      description.trim() || `Workspace untuk kolaborasi ${trimmedName}.`
+    ).catch((error) => {
+      console.error('Gagal membuat workspace:', getReadableError(error), error);
+    });
   }
 
-  function handleJoinWorkspace(inviteCode: string) {
+  async function handleJoinWorkspace(inviteCode: string) {
     const code = inviteCode.trim().toUpperCase();
 
     if (!code) {
@@ -488,66 +1159,82 @@ export default function WorkspacePage() {
       return;
     }
 
-    const existingWorkspace = workspaces.find(
-      (workspace) => workspace.inviteCode.toUpperCase() === code
-    );
-
-    if (existingWorkspace) {
-      switchWorkspace(existingWorkspace.id);
-      setWorkspaceFeedback('Kamu sudah tergabung di grup ini.');
-      return;
-    }
-
-    const joinedWorkspace = makeJoinedWorkspace(code);
-    const firstRoomId = 'diskusi-umum';
-
-    setWorkspaces((prev) => [...prev, joinedWorkspace]);
-    setRoomsByWorkspace((prev) => ({
-      ...prev,
-      [joinedWorkspace.id]: [
+    try {
+      const accessToken = await getAccessToken();
+      const { workspace, channel } = await apiFetch<JoinWorkspaceResponse>(
+        `/api/workspaces/join/${code}`,
         {
-          id: firstRoomId,
-          name: 'Diskusi Umum',
-          icon: 'message',
-          description: 'Ruang awal dari grup yang baru diikuti.',
-        },
-      ],
-    }));
-    setMessagesByWorkspace((prev) => ({
-      ...prev,
-      [joinedWorkspace.id]: {
-        [firstRoomId]: [
+          method: 'POST',
+          accessToken,
+        }
+      );
+
+      const nextWorkspace = toWorkspace(workspace, workspaces.length);
+      const firstRoom = toRoom(channel);
+
+      setWorkspaces((prev) => {
+        if (prev.some((item) => item.id === nextWorkspace.id)) return prev;
+        return [...prev, nextWorkspace];
+      });
+      setRoomsByWorkspace((prev) => ({
+        ...prev,
+        [workspace.id]: prev[workspace.id] ?? [firstRoom],
+      }));
+      setMessagesByWorkspace((prev) => ({
+        ...prev,
+        [workspace.id]: prev[workspace.id] ?? { [firstRoom.id]: [] },
+      }));
+      setMembersByWorkspace((prev) => ({
+        ...prev,
+        [workspace.id]: prev[workspace.id] ?? [
           {
-            id: Date.now(),
-            user: 'Sistem',
-            avatar: 'bg-slate-500',
-            time: new Date().toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit',
-            }),
-            type: 'text',
-            text: `Kamu bergabung memakai kode invite ${code}.`,
+            id: currentUser?.id ?? `${workspace.id}-me`,
+            name: currentUserName,
+            email: currentUserEmail,
+            role: 'Member',
+            status: 'active',
+            avatar: currentUserAvatar,
           },
         ],
-      },
-    }));
-    setMembersByWorkspace((prev) => ({
-      ...prev,
-      [joinedWorkspace.id]: [
-        {
-          id: `${joinedWorkspace.id}-me`,
-          name: 'Fadhlan',
-          email: 'fadhlan@kampus.ac.id',
-          role: 'Member',
-          status: 'active',
-          avatar: 'bg-indigo-600',
-        },
-      ],
-    }));
-    setWorkspaceFeedback('');
-    setWorkspaceModal(null);
-    setActiveWorkspaceId(joinedWorkspace.id);
-    setActiveRoomId(firstRoomId);
+      }));
+      setWorkspaceFeedback('');
+      setWorkspaceModal(null);
+      setActiveWorkspaceId(workspace.id);
+      setActiveRoomId(firstRoom.id);
+    } catch (error) {
+      setWorkspaceFeedback(getReadableError(error));
+    }
+  }
+
+  if (isAuthLoading || !activeWorkspace) {
+    if (!isAuthLoading && workspaceError) {
+      return (
+        <div className="flex h-screen items-center justify-center bg-gray-50 p-6">
+          <div className="max-w-md rounded-xl border border-red-100 bg-white p-6 shadow-sm">
+            <p className="text-sm font-bold text-red-600">
+              Gagal memuat workspace
+            </p>
+            <p className="mt-2 text-sm leading-6 text-gray-600">
+              {workspaceError}
+            </p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="mt-4 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+            >
+              Coba lagi
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex h-screen items-center justify-center bg-white text-sm font-medium text-gray-500">
+        <Loader2 size={18} className="mr-3 animate-spin text-indigo-600" />
+        Memuat workspace...
+      </div>
+    );
   }
 
   return (
@@ -570,6 +1257,9 @@ export default function WorkspacePage() {
         workspaceName={activeWorkspace.name}
         workspaceInitials={activeWorkspace.shortName}
         workspaceColor={activeWorkspace.color}
+        currentUserName={currentUserName}
+        currentUserInitial={currentUserInitial}
+        currentUserStatus={currentUserStatus}
         memberCount={members.length}
         members={members}
         rooms={rooms}
@@ -592,6 +1282,7 @@ export default function WorkspacePage() {
         onCreateChannel={() => setShowChannelModal(true)}
         onDeleteChannel={openDeleteChannelModal}
         onToggleFavoriteChannel={handleToggleFavoriteChannel}
+        onStatusChange={handleStatusChange}
       />
 
       <div className="flex flex-1 flex-col bg-white">
@@ -695,7 +1386,7 @@ export default function WorkspacePage() {
             <WorkspaceSettingsModal
               workspace={activeWorkspace}
               members={members}
-              canLeave={workspaces.length > 1}
+              canLeave={true}
               onClose={() => setShowWorkspaceSettings(false)}
               onUpdate={handleUpdateWorkspace}
               onLeave={handleLeaveWorkspace}

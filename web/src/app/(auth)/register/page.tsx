@@ -1,7 +1,88 @@
 // src/app/(auth)/register/page.tsx
+'use client';
+
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useState, type FormEvent } from 'react';
+import { getSupabaseBrowserClient } from '@/lib/supabaseClient';
 
 export default function RegisterPage() {
+  const router = useRouter();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [message, setMessage] = useState('');
+  const [isError, setIsError] = useState(false);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMessage('');
+    setIsError(false);
+    setIsSubmitting(true);
+
+    const formData = new FormData(event.currentTarget);
+    const firstName = String(formData.get('firstName') || '').trim();
+    const lastName = String(formData.get('lastName') || '').trim();
+    const username = String(formData.get('username') || '').trim();
+    const email = String(formData.get('email') || '').trim();
+    const password = String(formData.get('password') || '');
+    const confirmPassword = String(formData.get('confirmPassword') || '');
+    const fullName = [firstName, lastName].filter(Boolean).join(' ');
+
+    if (!firstName || !username || !email || !password) {
+      setIsError(true);
+      setMessage('Lengkapi nama depan, username, email, dan kata sandi.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setIsError(true);
+      setMessage('Konfirmasi kata sandi tidak sama.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (password.length < 8) {
+      setIsError(true);
+      setMessage('Kata sandi minimal 8 karakter.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+            username,
+          },
+        },
+      });
+
+      if (error) {
+        setIsError(true);
+        setMessage(error.message);
+        return;
+      }
+
+      if (data.session) {
+        router.push('/workspace');
+        return;
+      }
+
+      setMessage('Registrasi berhasil. Jika verifikasi email aktif, cek email sebelum login.');
+    } catch (error) {
+      setIsError(true);
+      setMessage(
+        error instanceof Error ? error.message : 'Gagal membuat akun. Coba lagi.'
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   return (
     <div className="flex h-screen">
 
@@ -79,7 +160,7 @@ export default function RegisterPage() {
           </div>
 
           {/* Form */}
-          <form className="space-y-4">
+          <form className="space-y-4" onSubmit={handleSubmit}>
 
             {/* Nama depan & belakang */}
             <div className="flex gap-3">
@@ -88,8 +169,10 @@ export default function RegisterPage() {
                   Nama depan
                 </label>
                 <input
+                  name="firstName"
                   type="text"
                   placeholder="Fadhlan"
+                  required
                   className="w-full h-10 px-3 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition-all"
                 />
               </div>
@@ -98,6 +181,7 @@ export default function RegisterPage() {
                   Nama belakang
                 </label>
                 <input
+                  name="lastName"
                   type="text"
                   placeholder="..."
                   className="w-full h-10 px-3 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition-all"
@@ -111,8 +195,10 @@ export default function RegisterPage() {
                 Username
               </label>
               <input
+                name="username"
                 type="text"
                 placeholder="fadhlan123"
+                required
                 className="w-full h-10 px-3 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition-all"
               />
               <p className="text-[11px] text-gray-400">
@@ -126,8 +212,10 @@ export default function RegisterPage() {
                 Email
               </label>
               <input
+                name="email"
                 type="email"
                 placeholder="nama@email.com"
+                required
                 className="w-full h-10 px-3 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition-all"
               />
             </div>
@@ -138,8 +226,11 @@ export default function RegisterPage() {
                 Kata sandi
               </label>
               <input
+                name="password"
                 type="password"
                 placeholder="••••••••"
+                required
+                minLength={8}
                 className="w-full h-10 px-3 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition-all"
               />
               <p className="text-[11px] text-gray-400">
@@ -153,17 +244,33 @@ export default function RegisterPage() {
                 Konfirmasi kata sandi
               </label>
               <input
+                name="confirmPassword"
                 type="password"
                 placeholder="••••••••"
+                required
+                minLength={8}
                 className="w-full h-10 px-3 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition-all"
               />
             </div>
 
+            {message && (
+              <p
+                className={`rounded-lg border px-3 py-2 text-xs ${
+                  isError
+                    ? 'border-red-100 bg-red-50 text-red-600'
+                    : 'border-emerald-100 bg-emerald-50 text-emerald-700'
+                }`}
+              >
+                {message}
+              </p>
+            )}
+
             <button
               type="submit"
+              disabled={isSubmitting}
               className="w-full h-10 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors"
             >
-              Buat akun
+              {isSubmitting ? 'Memproses...' : 'Buat akun'}
             </button>
 
           </form>

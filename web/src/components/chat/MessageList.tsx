@@ -12,9 +12,9 @@ interface MessageListProps {
   emptyDescription?: string;
   typingUser?: string;
   onReply: (message: Message) => void;
-  onTogglePin: (messageId: number) => void;
+  onTogglePin: (messageId: Message['id']) => void;
   onEdit: (message: Message) => void;
-  onDelete: (messageId: number) => void;
+  onDelete: (messageId: Message['id']) => void;
 }
 
 export default function MessageList({
