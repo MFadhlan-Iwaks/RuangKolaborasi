@@ -16,6 +16,8 @@ interface StatusMenuProps {
   onStatusChange: (status: Status) => void;
   show: boolean;
   onToggle: () => void;
+  userName: string;
+  userInitial: string;
 }
 
 export default function StatusMenu({
@@ -23,6 +25,8 @@ export default function StatusMenu({
   onStatusChange,
   show,
   onToggle,
+  userName,
+  userInitial,
 }: StatusMenuProps) {
   const current = STATUS_CONFIG[status];
   const CurrentIcon = current.icon;
@@ -36,12 +40,12 @@ export default function StatusMenu({
       >
         <div className="relative">
           <div className="w-9 h-9 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center shadow-sm">
-            F
+            {userInitial}
           </div>
           <div className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 ${current.bgColor} border-[2.5px] border-white rounded-full transition-colors duration-300`} />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-bold text-gray-900 truncate">Fadhlan</p>
+          <p className="text-sm font-bold text-gray-900 truncate">{userName}</p>
           <p className={`text-xs ${current.color} flex items-center font-medium`}>
             <CurrentIcon size={10} className="mr-1" />
             {current.label}

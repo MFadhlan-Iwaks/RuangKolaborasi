@@ -4,9 +4,9 @@ import { Message } from '@/types';
 interface MessageBubbleProps {
   message: Message;
   onReply: (message: Message) => void;
-  onTogglePin: (messageId: number) => void;
+  onTogglePin: (messageId: Message['id']) => void;
   onEdit: (message: Message) => void;
-  onDelete: (messageId: number) => void;
+  onDelete: (messageId: Message['id']) => void;
 }
 
 export default function MessageBubble({
@@ -102,6 +102,14 @@ export default function MessageBubble({
               <p className="text-sm leading-relaxed text-gray-700">
                 {message.text}
               </p>
+            )}
+            {message.fileUrl && message.mimeType?.startsWith('image/') && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={message.fileUrl}
+                alt={message.fileName || 'Lampiran gambar'}
+                className="max-h-80 max-w-md rounded-lg border border-gray-200 object-contain"
+              />
             )}
             <div className="group/file flex w-72 cursor-pointer items-start space-x-3 rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition-shadow hover:shadow-md">
               <div className="rounded-lg bg-blue-50 p-2 text-blue-600 transition-colors group-hover/file:bg-blue-100">

@@ -5,6 +5,7 @@ const { env } = require('./config/env');
 const healthRoutes = require('./routes/health.routes');
 const authRoutes = require('./routes/auth.routes');
 const aiRoutes = require('./routes/ai.routes');
+const workspaceRoutes = require('./routes/workspace.routes');
 
 function createApp() {
   const app = express();
@@ -14,11 +15,12 @@ function createApp() {
     origin: env.corsOrigin === '*' ? '*' : env.corsOrigin.split(',').map((origin) => origin.trim()),
     credentials: env.corsOrigin !== '*'
   }));
-  app.use(express.json({ limit: '1mb' }));
+  app.use(express.json({ limit: '20mb' }));
 
   app.use('/api/health', healthRoutes);
   app.use('/api/auth', authRoutes);
   app.use('/api/ai', aiRoutes);
+  app.use('/api/workspaces', workspaceRoutes);
 
   app.use((req, res) => {
     res.status(404).json({

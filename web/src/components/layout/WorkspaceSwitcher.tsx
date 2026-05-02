@@ -78,9 +78,10 @@ export default function WorkspaceSwitcher({
           type="button"
           onClick={onJoinWorkspace}
           title="Join grup"
-          className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-blue-600 transition-colors hover:border-blue-100 hover:bg-blue-50"
+          className="flex h-11 w-11 flex-col items-center justify-center rounded-xl border border-slate-200 bg-white text-blue-600 transition-colors hover:border-blue-100 hover:bg-blue-50"
         >
           <LogIn size={19} />
+          <span className="mt-0.5 text-[9px] font-bold leading-none">Join</span>
         </button>
       </div>
     </aside>

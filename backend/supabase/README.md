@@ -6,6 +6,9 @@ Run migrations from the `migrations` folder in Supabase SQL Editor.
 
 1. `migrations/001_initial_schema.sql`
 2. `migrations/002_enable_realtime.sql`
+3. `migrations/003_allow_profile_insert.sql`
+4. `migrations/004_persist_workspace_ui_state.sql`
+5. `migrations/005_profile_status_realtime.sql`
 
 ## Notes
 

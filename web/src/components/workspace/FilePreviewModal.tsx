@@ -42,16 +42,25 @@ export default function FilePreviewModal({
         </div>
 
         <div className="p-6">
-          <div className="flex aspect-video items-center justify-center rounded-xl border border-dashed border-gray-200 bg-gray-50">
-            <div className="text-center">
-              <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-blue-600 shadow-sm">
-                <FileCategoryIcon category={getFileCategory(file.fileName)} />
+          <div className="flex aspect-video items-center justify-center overflow-hidden rounded-xl border border-dashed border-gray-200 bg-gray-50">
+            {file.fileUrl && file.mimeType?.startsWith('image/') ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={file.fileUrl}
+                alt={file.fileName || 'Preview file'}
+                className="h-full w-full object-contain"
+              />
+            ) : (
+              <div className="text-center">
+                <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-blue-600 shadow-sm">
+                  <FileCategoryIcon category={getFileCategory(file.fileName)} />
+                </div>
+                <p className="text-sm font-bold text-gray-900">Preview belum tersedia</p>
+                <p className="mt-1 text-xs text-gray-500">
+                  Gunakan tombol download untuk membuka file ini.
+                </p>
               </div>
-              <p className="text-sm font-bold text-gray-900">Preview file mock</p>
-              <p className="mt-1 text-xs text-gray-500">
-                Integrasi preview asli bisa disambungkan ke storage nanti.
-              </p>
-            </div>
+            )}
           </div>
 
           {file.text && (

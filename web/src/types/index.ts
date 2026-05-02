@@ -14,7 +14,7 @@ export interface User {
 }
 
 export interface Message {
-  id: number;
+  id: number | string;
   user: string;
   avatar: string;
   time: string;
@@ -22,6 +22,8 @@ export interface Message {
   text?: string;
   fileName?: string;
   fileSize?: string;
+  fileUrl?: string;
+  mimeType?: string;
   pinned?: boolean;
   edited?: boolean;
   replyTo?: {
@@ -55,6 +57,7 @@ export interface TeamMember {
   email: string;
   role: 'Owner' | 'Admin' | 'Member';
   status: 'active' | 'pending';
+  profileStatus?: Status;
   avatar: string;
 }
 

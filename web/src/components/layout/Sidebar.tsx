@@ -10,6 +10,9 @@ interface SidebarProps {
   workspaceName: string;
   workspaceInitials: string;
   workspaceColor: string;
+  currentUserName: string;
+  currentUserInitial: string;
+  currentUserStatus: Status;
   memberCount: number;
   members: TeamMember[];
   rooms: Room[];
@@ -18,12 +21,16 @@ interface SidebarProps {
   onCreateChannel: () => void;
   onDeleteChannel: () => void;
   onToggleFavoriteChannel: (roomId: string) => void;
+  onStatusChange: (status: Status) => void;
 }
 
 export default function Sidebar({
   workspaceName,
   workspaceInitials,
   workspaceColor,
+  currentUserName,
+  currentUserInitial,
+  currentUserStatus,
   memberCount,
   members,
   rooms,
@@ -32,9 +39,9 @@ export default function Sidebar({
   onCreateChannel,
   onDeleteChannel,
   onToggleFavoriteChannel,
+  onStatusChange,
 }: SidebarProps) {
   const [showStatusMenu, setShowStatusMenu] = useState(false);
-  const [status, setStatus] = useState<Status>('online');
   const favoriteRooms = rooms.filter((room) => room.favorite && !room.archived);
   const activeRooms = rooms.filter((room) => !room.archived);
   const archivedRooms = rooms.filter((room) => room.archived);
@@ -180,7 +187,11 @@ export default function Sidebar({
           <div className="space-y-0.5">
             {members
               .filter((member) => member.status === 'active')
-              .map((member) => (
+              .map((member) => {
+                const memberStatus = member.profileStatus || 'online';
+                const isOffline = memberStatus === 'offline';
+
+                return (
               <div
                 key={member.id}
                 className="w-full flex items-center space-x-3 px-2 py-2 rounded-md text-gray-600"
@@ -189,18 +200,29 @@ export default function Sidebar({
                   <div className={`w-6 h-6 rounded-full text-white text-[10px] font-bold flex items-center justify-center ${member.avatar}`}>
                     {member.name.charAt(0)}
                   </div>
-                  <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border-2 border-white rounded-full" />
+                  <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 ${
+                    memberStatus === 'online'
+                      ? 'bg-green-500'
+                      : memberStatus === 'idle'
+                        ? 'bg-amber-500'
+                        : memberStatus === 'dnd'
+                          ? 'bg-red-500'
+                          : 'bg-gray-400'
+                  } border-2 border-white rounded-full`} />
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-gray-700">
                     {member.name}
                   </p>
-                  <p className="text-[10px] font-medium uppercase tracking-wide text-green-600">
-                    Online
+                  <p className={`text-[10px] font-medium uppercase tracking-wide ${
+                    isOffline ? 'text-gray-500' : memberStatus === 'idle' ? 'text-amber-500' : memberStatus === 'dnd' ? 'text-red-500' : 'text-green-600'
+                  }`}>
+                    {memberStatus}
                   </p>
                 </div>
               </div>
-            ))}
+                );
+              })}
           </div>
         </div>
 
@@ -209,10 +231,12 @@ export default function Sidebar({
       {/* User Info + Status */}
       <div className="p-4 border-t border-gray-200 relative">
         <StatusMenu
-          status={status}
-          onStatusChange={setStatus}
+          status={currentUserStatus}
+          onStatusChange={onStatusChange}
           show={showStatusMenu}
           onToggle={() => setShowStatusMenu(!showStatusMenu)}
+          userName={currentUserName}
+          userInitial={currentUserInitial}
         />
       </div>
 
