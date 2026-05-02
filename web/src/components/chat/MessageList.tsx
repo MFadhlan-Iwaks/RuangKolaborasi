@@ -2,14 +2,31 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { MessageSquareText } from 'lucide-react';
 import { Message } from '@/types';
 import MessageBubble from './MessageBubble';
 
 interface MessageListProps {
   messages: Message[];
+  emptyTitle?: string;
+  emptyDescription?: string;
+  typingUser?: string;
+  onReply: (message: Message) => void;
+  onTogglePin: (messageId: number) => void;
+  onEdit: (message: Message) => void;
+  onDelete: (messageId: number) => void;
 }
 
-export default function MessageList({ messages }: MessageListProps) {
+export default function MessageList({
+  messages,
+  emptyTitle = 'Belum ada pesan di channel ini',
+  emptyDescription = 'Mulai diskusi pertama, atau seret file ke area chat untuk membagikan dokumen ke tim.',
+  typingUser,
+  onReply,
+  onTogglePin,
+  onEdit,
+  onDelete,
+}: MessageListProps) {
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -29,9 +46,39 @@ export default function MessageList({ messages }: MessageListProps) {
       </div>
 
       {/* Render pesan */}
-      {messages.map((msg) => (
-        <MessageBubble key={msg.id} message={msg} />
-      ))}
+      {messages.length === 0 ? (
+        <div className="flex min-h-[240px] flex-col items-center justify-center rounded-xl border border-dashed border-gray-200 bg-gray-50/70 px-6 text-center">
+          <div className="mb-3 rounded-full bg-white p-3 text-gray-400 shadow-sm">
+            <MessageSquareText size={24} />
+          </div>
+          <h3 className="text-sm font-bold text-gray-900">{emptyTitle}</h3>
+          <p className="mt-1 max-w-sm text-xs leading-5 text-gray-500">
+            {emptyDescription}
+          </p>
+        </div>
+      ) : (
+        messages.map((msg) => (
+          <MessageBubble
+            key={msg.id}
+            message={msg}
+            onReply={onReply}
+            onTogglePin={onTogglePin}
+            onEdit={onEdit}
+            onDelete={onDelete}
+          />
+        ))
+      )}
+
+      {typingUser && (
+        <div className="flex items-center gap-3 pl-14 text-xs font-medium text-gray-400">
+          <div className="flex gap-1 rounded-full bg-gray-100 px-3 py-2">
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400" />
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400 [animation-delay:120ms]" />
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400 [animation-delay:240ms]" />
+          </div>
+          <span>{typingUser} sedang mengetik...</span>
+        </div>
+      )}
 
       <div ref={endRef} className="h-4" />
     </div>
