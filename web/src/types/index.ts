@@ -5,6 +5,7 @@ export type Status = 'online' | 'idle' | 'dnd' | 'offline';
 export type MessageType = 'text' | 'file';
 export type MessageFilter = 'all' | 'files' | 'pinned';
 export type FileCategory = 'all' | 'documents' | 'images' | 'code';
+export type NotificationKind = 'message' | 'file' | 'mention' | 'invite' | 'ai';
 import type { ElementType } from 'react';
 
 export interface User {
@@ -59,6 +60,19 @@ export interface TeamMember {
   status: 'active' | 'pending';
   profileStatus?: Status;
   avatar: string;
+  bio?: string;
+}
+
+export interface NotificationItem {
+  id: string;
+  kind: NotificationKind;
+  title: string;
+  description: string;
+  time: string;
+  unread?: boolean;
+  inviteCode?: string;
+  inviteWorkspaceName?: string;
+  inviteStatus?: 'pending' | 'accepted' | 'declined';
 }
 
 export interface StatusConfig {

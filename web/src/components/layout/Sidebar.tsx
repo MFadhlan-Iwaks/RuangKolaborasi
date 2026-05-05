@@ -189,7 +189,7 @@ export default function Sidebar({
               .filter((member) => member.status === 'active')
               .map((member) => {
                 const memberStatus = member.profileStatus || 'online';
-                const isOffline = memberStatus === 'offline';
+                const memberBio = member.bio || 'Siap diskusi di ruang kerja.';
 
                 return (
               <div
@@ -214,10 +214,8 @@ export default function Sidebar({
                   <p className="truncate text-sm font-medium text-gray-700">
                     {member.name}
                   </p>
-                  <p className={`text-[10px] font-medium uppercase tracking-wide ${
-                    isOffline ? 'text-gray-500' : memberStatus === 'idle' ? 'text-amber-500' : memberStatus === 'dnd' ? 'text-red-500' : 'text-green-600'
-                  }`}>
-                    {memberStatus}
+                  <p className="truncate text-xs text-gray-400">
+                    {memberBio}
                   </p>
                 </div>
               </div>

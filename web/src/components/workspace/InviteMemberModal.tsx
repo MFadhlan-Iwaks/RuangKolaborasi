@@ -4,21 +4,34 @@ import { useState, type FormEvent } from 'react';
 import { Mail, UserPlus, Users, X } from 'lucide-react';
 import { TeamMember, Workspace } from '@/types';
 
+interface InviteConfirmation {
+  id: string;
+  email: string;
+  workspaceName: string;
+  status: 'pending' | 'accepted' | 'declined';
+}
+
 interface InviteMemberModalProps {
   workspace: Workspace;
   members: TeamMember[];
+  invites: InviteConfirmation[];
   message: string;
   onClose: () => void;
   onInvite: (email: string, role: TeamMember['role']) => void;
+  onAcceptInvite: (inviteId: string) => void;
+  onDeclineInvite: (inviteId: string) => void;
   onMessageClear: () => void;
 }
 
 export default function InviteMemberModal({
   workspace,
   members,
+  invites,
   message,
   onClose,
   onInvite,
+  onAcceptInvite,
+  onDeclineInvite,
   onMessageClear,
 }: InviteMemberModalProps) {
   const [email, setEmail] = useState('');
@@ -112,6 +125,66 @@ export default function InviteMemberModal({
             </button>
           </div>
         </form>
+
+        <div className="border-t border-gray-100 px-6 py-4">
+          <div className="mb-3 flex items-center gap-2 text-sm font-bold text-gray-900">
+            <Mail size={16} className="text-gray-400" />
+            Konfirmasi Invite
+          </div>
+          {invites.length === 0 ? (
+            <p className="rounded-lg bg-gray-50 px-3 py-3 text-xs font-medium text-gray-500">
+              Belum ada invite yang menunggu konfirmasi.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {invites.map((invite) => (
+                <div
+                  key={invite.id}
+                  className="rounded-lg border border-gray-100 bg-white px-3 py-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-bold text-gray-900">
+                        {invite.email}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        Invite ke {invite.workspaceName}
+                      </p>
+                    </div>
+                    {invite.status === 'pending' ? (
+                      <div className="flex shrink-0 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => onAcceptInvite(invite.id)}
+                          className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-blue-700"
+                        >
+                          Gabung
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onDeclineInvite(invite.id)}
+                          className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-600 transition-colors hover:bg-gray-50"
+                        >
+                          Tolak
+                        </button>
+                      </div>
+                    ) : (
+                      <span
+                        className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${
+                          invite.status === 'accepted'
+                            ? 'bg-emerald-50 text-emerald-600'
+                            : 'bg-gray-100 text-gray-500'
+                        }`}
+                      >
+                        {invite.status === 'accepted' ? 'Diterima' : 'Ditolak'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         <div className="border-t border-gray-100 px-6 py-4">
           <div className="mb-3 flex items-center gap-2 text-sm font-bold text-gray-900">

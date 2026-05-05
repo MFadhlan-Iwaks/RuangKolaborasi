@@ -1,13 +1,22 @@
 // src/app/(main)/workspace/page.tsx
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Sparkles,
   Loader2,
   X,
 } from 'lucide-react';
-import { FileCategory, Message, MessageFilter, Room, Status, TeamMember, Workspace } from '@/types';
+import {
+  FileCategory,
+  Message,
+  MessageFilter,
+  NotificationItem,
+  Room,
+  Status,
+  TeamMember,
+  Workspace,
+} from '@/types';
 import WorkspaceSwitcher from '@/components/layout/WorkspaceSwitcher';
 import Sidebar from '@/components/layout/Sidebar';
 import MessageList from '@/components/chat/MessageList';
@@ -22,6 +31,7 @@ import InviteMemberModal from '@/components/workspace/InviteMemberModal';
 import { CreateWorkspaceModal, JoinWorkspaceModal } from '@/components/workspace/WorkspaceAccessModals';
 import WorkspaceHeader from '@/components/workspace/WorkspaceHeader';
 import WorkspaceSettingsModal from '@/components/workspace/WorkspaceSettingsModal';
+import UserProfileModal from '@/components/workspace/UserProfileModal';
 import { useGemini } from '@/hooks/useGemini';
 import { useDragDrop } from '@/hooks/useDragDrop';
 import {
@@ -32,6 +42,7 @@ import {
 import { getSupabaseBrowserClient } from '@/lib/supabaseClient';
 import { apiFetch } from '@/lib/apiClient';
 const EMPTY_MEMBERS: TeamMember[] = [];
+const EMPTY_MESSAGES: Message[] = [];
 const WORKSPACE_COLORS = ['bg-blue-600', 'bg-emerald-600', 'bg-violet-600', 'bg-teal-600'];
 
 interface CurrentUser {
@@ -40,6 +51,8 @@ interface CurrentUser {
   email: string;
   initial: string;
   avatar: string;
+  photoUrl?: string;
+  bio: string;
   status: Status;
 }
 
@@ -136,6 +149,7 @@ interface BootstrapMemberRow {
   full_name: string;
   email: string | null;
   avatar_url: string | null;
+  bio?: string | null;
   profile_status?: Status | null;
 }
 
@@ -181,6 +195,17 @@ interface EnsureProfileResponse {
     id: string;
     status?: Status | null;
   };
+}
+
+interface PendingInvitation {
+  id: string;
+  workspaceId?: string;
+  workspaceName: string;
+  inviterName: string;
+  invitedEmail?: string;
+  role?: TeamMember['role'];
+  inviteCode: string;
+  status: 'pending' | 'accepted' | 'declined';
 }
 
 function toWorkspace(row: WorkspaceRow, index: number): Workspace {
@@ -239,6 +264,10 @@ function toMember(row: BootstrapMemberRow, currentUser: CurrentUser): TeamMember
     status: 'active',
     avatar: isMine ? currentUser.avatar : 'bg-slate-500',
     profileStatus: isMine ? currentUser.status : row.profile_status || 'online',
+    bio:
+      isMine
+        ? currentUser.bio
+        : row.bio || 'Siap bantu progres diskusi tim.',
   };
 }
 
@@ -299,11 +328,13 @@ export default function WorkspacePage() {
   const [showDeleteChannelModal, setShowDeleteChannelModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showWorkspaceSettings, setShowWorkspaceSettings] = useState(false);
+  const [showUserProfile, setShowUserProfile] = useState(false);
   const [workspaceModal, setWorkspaceModal] = useState<'create' | 'join' | null>(
     null
   );
   const [inviteMessage, setInviteMessage] = useState('');
   const [workspaceFeedback, setWorkspaceFeedback] = useState('');
+  const [incomingInvites, setIncomingInvites] = useState<PendingInvitation[]>([]);
   const [draftFile, setDraftFile] = useState<File | null>(null);
   const [deleteConfirmRoomId, setDeleteConfirmRoomId] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -327,6 +358,8 @@ export default function WorkspacePage() {
   const currentUserEmail = currentUser?.email ?? 'user@local.test';
   const currentUserInitial = currentUser?.initial ?? 'K';
   const currentUserAvatar = currentUser?.avatar ?? 'bg-indigo-600';
+  const currentUserPhotoUrl = currentUser?.photoUrl;
+  const currentUserBio = currentUser?.bio ?? 'Fokus diskusi tim dan siap bantu progres tugas.';
   const currentUserStatus = currentUser?.status ?? 'online';
   const currentUserId = currentUser?.id ?? '';
 
@@ -336,8 +369,9 @@ export default function WorkspacePage() {
   const rooms = roomsByWorkspace[activeWorkspaceId] ?? [];
   const members = membersByWorkspace[activeWorkspaceId] ?? EMPTY_MEMBERS;
   const activeRoom = rooms.find((room) => room.id === activeRoomId) ?? rooms[0];
+  const currentMember = members.find((member) => member.id === currentUserId);
   const messages =
-    messagesByWorkspace[activeWorkspaceId]?.[activeRoom?.id ?? ''] ?? [];
+    messagesByWorkspace[activeWorkspaceId]?.[activeRoom?.id ?? ''] ?? EMPTY_MESSAGES;
   const typingMemberName =
     members.find((member) => member.status === 'active' && member.name !== currentUserName)
       ?.name ?? '';
@@ -368,6 +402,74 @@ export default function WorkspacePage() {
       .filter(Boolean)
       .some((value) => value?.toLowerCase().includes(query));
   });
+  const headerNotifications = useMemo<NotificationItem[]>(() => {
+    if (!activeWorkspace) return [];
+
+    const latestMessage = messages.at(-1);
+    const latestFile = [...messages].reverse().find((message) => message.type === 'file');
+    const latestPinned = [...messages].reverse().find((message) => message.pinned);
+    const roomName = activeRoom?.name ?? 'channel aktif';
+
+    return [
+      ...incomingInvites.map((invite) => ({
+        id: invite.id,
+        kind: 'invite' as const,
+        title: invite.invitedEmail
+          ? `Invite untuk ${invite.invitedEmail}`
+          : `${invite.inviterName} mengundang kamu`,
+        description: invite.invitedEmail
+          ? `${invite.invitedEmail} perlu konfirmasi untuk gabung ke ${invite.workspaceName}.`
+          : `Gabung ke ${invite.workspaceName} dengan kode ${invite.inviteCode}.`,
+        time: 'Baru saja',
+        unread: invite.status === 'pending',
+        inviteCode: invite.inviteCode,
+        inviteWorkspaceName: invite.workspaceName,
+        inviteStatus: invite.status,
+      })),
+      latestMessage && {
+        id: `message-${latestMessage.id}`,
+        kind: 'message' as const,
+        title: `Pesan baru di #${roomName}`,
+        description: getMessagePreview(latestMessage),
+        time: latestMessage.time,
+        unread: true,
+      },
+      latestFile && {
+        id: `file-${latestFile.id}`,
+        kind: 'file' as const,
+        title: 'File baru dibagikan',
+        description: latestFile.fileName ?? 'Lampiran dari anggota workspace.',
+        time: latestFile.time,
+        unread: true,
+      },
+      latestPinned && {
+        id: `pin-${latestPinned.id}`,
+        kind: 'mention' as const,
+        title: 'Pesan penting dipin',
+        description: getMessagePreview(latestPinned),
+        time: latestPinned.time,
+        unread: false,
+      },
+      {
+        id: `invite-${activeWorkspace.id}`,
+        kind: 'invite' as const,
+        title: 'Kode invite siap dibagikan',
+        description: `${activeWorkspace.inviteCode} untuk mengundang anggota ke ${activeWorkspace.name}.`,
+        time: 'Baru saja',
+        unread: false,
+      },
+      {
+        id: `ai-${activeRoom?.id ?? activeWorkspace.id}`,
+        kind: 'ai' as const,
+        title: 'Rangkuman AI tersedia',
+        description: messages.length
+          ? 'Gunakan Rangkum Diskusi untuk membaca inti percakapan.'
+          : 'Mulai diskusi dulu agar Gemini bisa membuat rangkuman.',
+        time: 'Hari ini',
+        unread: false,
+      },
+    ].filter(Boolean) as NotificationItem[];
+  }, [activeRoom?.id, activeRoom?.name, activeWorkspace, incomingInvites, messages]);
 
   async function loadWorkspaceData(currentUser: CurrentUser, accessToken: string) {
     const payload = await apiFetch<BootstrapResponse>('/api/workspaces/bootstrap', {
@@ -440,6 +542,11 @@ export default function WorkspacePage() {
           email: user.email ?? '',
           initial: makeInitials(name).slice(0, 2) || 'U',
           avatar: 'bg-indigo-600',
+          photoUrl: profile?.avatar_url || undefined,
+          bio:
+            typeof user.user_metadata?.bio === 'string'
+              ? user.user_metadata.bio
+              : 'Fokus diskusi tim dan siap bantu progres tugas.',
           status: (profile?.status as Status | null) || 'online',
         };
 
@@ -640,6 +747,188 @@ export default function WorkspacePage() {
     }
   }
 
+  async function handleLogout() {
+    try {
+      const supabase = getSupabaseBrowserClient();
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error('Gagal logout:', getReadableError(error), error);
+    } finally {
+      window.location.replace('/login');
+    }
+  }
+
+  function handleUpdateProfile(profile: { photoUrl?: string; bio: string }) {
+    setCurrentUser((prev) =>
+      prev
+        ? {
+            ...prev,
+            photoUrl: profile.photoUrl,
+            bio: profile.bio,
+          }
+        : prev
+    );
+    setMembersByWorkspace((prev) =>
+      Object.fromEntries(
+        Object.entries(prev).map(([workspaceId, workspaceMembers]) => [
+          workspaceId,
+          workspaceMembers.map((member) =>
+            member.id === currentUserId ? { ...member, bio: profile.bio } : member
+          ),
+        ])
+      )
+    );
+  }
+
+  function handleAcceptInvite(notification: NotificationItem) {
+    if (!notification.inviteWorkspaceName) return;
+    const invite = incomingInvites.find((item) => item.id === notification.id);
+
+    if (invite?.workspaceId && invite.invitedEmail) {
+      setIncomingInvites((prev) =>
+        prev.map((item) =>
+          item.id === notification.id ? { ...item, status: 'accepted' } : item
+        )
+      );
+      setMembersByWorkspace((prev) => ({
+        ...prev,
+        [invite.workspaceId as string]: (prev[invite.workspaceId as string] ?? []).map(
+          (member) =>
+            member.email.toLowerCase() === invite.invitedEmail?.toLowerCase()
+              ? {
+                  ...member,
+                  status: 'active',
+                  profileStatus: 'online',
+                  bio: 'Sudah menerima undangan workspace.',
+                }
+              : member
+        ),
+      }));
+      setInviteMessage(`${invite.invitedEmail} menerima invite.`);
+      return;
+    }
+
+    const workspaceId = `accepted-${notification.id}`;
+    const firstRoomId = `${workspaceId}-diskusi-utama`;
+    const nextWorkspace: Workspace = {
+      id: workspaceId,
+      name: notification.inviteWorkspaceName,
+      shortName: makeInitials(notification.inviteWorkspaceName),
+      description: `Workspace dari undangan ${notification.inviteCode ?? ''}.`,
+      color: WORKSPACE_COLORS[workspaces.length % WORKSPACE_COLORS.length],
+      inviteCode: notification.inviteCode ?? notification.id.toUpperCase(),
+    };
+    const firstRoom: Room = {
+      id: firstRoomId,
+      name: 'diskusi-utama',
+      icon: 'message',
+      description: `Ruang awal untuk ${notification.inviteWorkspaceName}.`,
+    };
+
+    setIncomingInvites((prev) =>
+      prev.map((invite) =>
+        invite.id === notification.id ? { ...invite, status: 'accepted' } : invite
+      )
+    );
+    setWorkspaces((prev) =>
+      prev.some((workspace) => workspace.id === workspaceId)
+        ? prev
+        : [...prev, nextWorkspace]
+    );
+    setRoomsByWorkspace((prev) => ({
+      ...prev,
+      [workspaceId]: prev[workspaceId] ?? [firstRoom],
+    }));
+    setMessagesByWorkspace((prev) => ({
+      ...prev,
+      [workspaceId]: prev[workspaceId] ?? { [firstRoomId]: [] },
+    }));
+    setMembersByWorkspace((prev) => ({
+      ...prev,
+      [workspaceId]: prev[workspaceId] ?? [
+        {
+          id: currentUserId || `${workspaceId}-me`,
+          name: currentUserName,
+          email: currentUserEmail,
+          role: 'Member',
+          status: 'active',
+          avatar: currentUserAvatar,
+          profileStatus: currentUserStatus,
+          bio: currentUserBio,
+        },
+        {
+          id: `${workspaceId}-inviter`,
+          name: notification.title.split(' ')[0] || 'Pengundang',
+          email: 'pengundang@workspace.local',
+          role: 'Admin',
+          status: 'active',
+          avatar: 'bg-violet-600',
+          profileStatus: 'online',
+          bio: 'Mengundang kamu ke workspace ini.',
+        },
+      ],
+    }));
+    setActiveWorkspaceId(workspaceId);
+    setActiveRoomId(firstRoomId);
+    setDraftFile(null);
+    setReplyToMessage(null);
+  }
+
+  function handleDeclineInvite(notification: NotificationItem) {
+    const invite = incomingInvites.find((item) => item.id === notification.id);
+
+    setIncomingInvites((prev) =>
+      prev.map((invite) =>
+        invite.id === notification.id ? { ...invite, status: 'declined' } : invite
+      )
+    );
+
+    if (invite?.workspaceId && invite.invitedEmail) {
+      setMembersByWorkspace((prev) => ({
+        ...prev,
+        [invite.workspaceId as string]: (prev[invite.workspaceId as string] ?? []).filter(
+          (member) =>
+            member.email.toLowerCase() !== invite.invitedEmail?.toLowerCase()
+        ),
+      }));
+      setInviteMessage(`${invite.invitedEmail} menolak invite.`);
+    }
+  }
+
+  function handleAcceptInviteById(inviteId: string) {
+    const invite = incomingInvites.find((item) => item.id === inviteId);
+
+    if (!invite) return;
+
+    handleAcceptInvite({
+      id: invite.id,
+      kind: 'invite',
+      title: `${invite.inviterName} mengundang kamu`,
+      description: `Gabung ke ${invite.workspaceName}.`,
+      time: 'Baru saja',
+      inviteCode: invite.inviteCode,
+      inviteWorkspaceName: invite.workspaceName,
+      inviteStatus: invite.status,
+    });
+  }
+
+  function handleDeclineInviteById(inviteId: string) {
+    const invite = incomingInvites.find((item) => item.id === inviteId);
+
+    if (!invite) return;
+
+    handleDeclineInvite({
+      id: invite.id,
+      kind: 'invite',
+      title: `${invite.inviterName} mengundang kamu`,
+      description: `Gabung ke ${invite.workspaceName}.`,
+      time: 'Baru saja',
+      inviteCode: invite.inviteCode,
+      inviteWorkspaceName: invite.workspaceName,
+      inviteStatus: invite.status,
+    });
+  }
+
   async function handleSendMessage(text: string, file?: File) {
     if (!activeRoom || !currentUser) return;
 
@@ -764,6 +1053,7 @@ export default function WorkspacePage() {
           status: 'active',
           avatar: currentUserAvatar,
           profileStatus: currentUserStatus,
+          bio: currentUserBio,
         },
       ],
     }));
@@ -1115,25 +1405,49 @@ export default function WorkspacePage() {
         }
       );
 
-      const nextMember = toMember(member, currentUser ?? {
-        id: '',
-        name: currentUserName,
-        email: currentUserEmail,
-        initial: currentUserInitial,
-        avatar: currentUserAvatar,
-        status: currentUserStatus,
-      });
+      const nextMember: TeamMember = {
+        ...toMember(member, currentUser ?? {
+          id: '',
+          name: currentUserName,
+          email: currentUserEmail,
+          initial: currentUserInitial,
+          avatar: currentUserAvatar,
+          photoUrl: currentUserPhotoUrl,
+          bio: currentUserBio,
+          status: currentUserStatus,
+        }),
+        email,
+        role,
+        status: 'pending',
+        profileStatus: 'offline',
+        bio: 'Menunggu konfirmasi invite.',
+      };
+      const nextInvite: PendingInvitation = {
+        id: `invite-${activeWorkspaceId}-${Date.now()}`,
+        workspaceId: activeWorkspaceId,
+        workspaceName: activeWorkspace.name,
+        inviterName: currentUserName,
+        invitedEmail: email,
+        role,
+        inviteCode: activeWorkspace.inviteCode,
+        status: 'pending',
+      };
 
       setMembersByWorkspace((prev) => {
         const currentMembers = prev[activeWorkspaceId] ?? [];
-        const withoutDuplicate = currentMembers.filter((item) => item.id !== nextMember.id);
+        const withoutDuplicate = currentMembers.filter(
+          (item) => item.email.toLowerCase() !== email
+        );
 
         return {
           ...prev,
           [activeWorkspaceId]: [...withoutDuplicate, nextMember],
         };
       });
-      setInviteMessage(`${email} berhasil ditambahkan ke workspace.`);
+      setIncomingInvites((prev) => [nextInvite, ...prev]);
+      setInviteMessage(
+        `Invite dikirim ke ${email}. Konfirmasi Gabung/Tolak muncul di notifikasi.`
+      );
     } catch (error) {
       setInviteMessage(getReadableError(error));
     }
@@ -1194,6 +1508,8 @@ export default function WorkspacePage() {
             role: 'Member',
             status: 'active',
             avatar: currentUserAvatar,
+            profileStatus: currentUserStatus,
+            bio: currentUserBio,
           },
         ],
       }));
@@ -1290,6 +1606,14 @@ export default function WorkspacePage() {
           activeRoom={activeRoom}
           activeWorkspace={activeWorkspace}
           memberCount={members.length}
+          currentUserName={currentUserName}
+          currentUserEmail={currentUserEmail}
+          currentUserInitial={currentUserInitial}
+          currentUserPhotoUrl={currentUserPhotoUrl}
+          currentUserBio={currentUserBio}
+          currentUserStatus={currentUserStatus}
+          currentUserRole={currentMember?.role}
+          notifications={headerNotifications}
           searchQuery={searchQuery}
           showFilePanel={showFilePanel}
           isSummarizing={isSummarizing}
@@ -1303,6 +1627,10 @@ export default function WorkspacePage() {
           onToggleFilePanel={() => setShowFilePanel((current) => !current)}
           onOpenChannelSettings={() => setShowChannelSettings(true)}
           onOpenSettings={() => setShowWorkspaceSettings(true)}
+          onOpenProfile={() => setShowUserProfile(true)}
+          onLogout={handleLogout}
+          onAcceptInvite={handleAcceptInvite}
+          onDeclineInvite={handleDeclineInvite}
         />
 
         <MessageFilterBar
@@ -1393,6 +1721,19 @@ export default function WorkspacePage() {
             />
           )}
 
+          {showUserProfile && (
+            <UserProfileModal
+              name={currentUserName}
+              email={currentUserEmail}
+              initial={currentUserInitial}
+              photoUrl={currentUserPhotoUrl}
+              bio={currentUserBio}
+              status={currentUserStatus}
+              onClose={() => setShowUserProfile(false)}
+              onSave={handleUpdateProfile}
+            />
+          )}
+
           {showChannelSettings && activeRoom && (
             <ChannelSettingsModal
               room={activeRoom}
@@ -1452,9 +1793,19 @@ export default function WorkspacePage() {
             <InviteMemberModal
               workspace={activeWorkspace}
               members={members}
+              invites={incomingInvites
+                .filter((invite) => invite.workspaceId === activeWorkspaceId)
+                .map((invite) => ({
+                  id: invite.id,
+                  email: invite.invitedEmail ?? 'user@workspace.local',
+                  workspaceName: invite.workspaceName,
+                  status: invite.status,
+                }))}
               message={inviteMessage}
               onClose={() => setShowInviteModal(false)}
               onInvite={handleInviteMember}
+              onAcceptInvite={handleAcceptInviteById}
+              onDeclineInvite={handleDeclineInviteById}
               onMessageClear={() => setInviteMessage('')}
             />
           )}

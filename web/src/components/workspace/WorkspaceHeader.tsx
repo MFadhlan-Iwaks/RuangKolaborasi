@@ -1,7 +1,7 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import {
-  Bell,
   SlidersHorizontal,
   Files,
   Hash,
@@ -11,12 +11,22 @@ import {
   Sparkles,
   UserPlus,
 } from 'lucide-react';
-import { Room, Workspace } from '@/types';
+import { NotificationItem, Room, Status, Workspace } from '@/types';
+import NotificationDropdown from './NotificationDropdown';
+import UserProfileDropdown from './UserProfileDropdown';
 
 interface WorkspaceHeaderProps {
   activeRoom?: Room;
   activeWorkspace: Workspace;
   memberCount: number;
+  currentUserName: string;
+  currentUserEmail: string;
+  currentUserInitial: string;
+  currentUserPhotoUrl?: string;
+  currentUserBio: string;
+  currentUserStatus: Status;
+  currentUserRole?: string;
+  notifications: NotificationItem[];
   searchQuery: string;
   showFilePanel: boolean;
   isSummarizing: boolean;
@@ -27,12 +37,24 @@ interface WorkspaceHeaderProps {
   onToggleFilePanel: () => void;
   onOpenChannelSettings: () => void;
   onOpenSettings: () => void;
+  onOpenProfile: () => void;
+  onLogout: () => void;
+  onAcceptInvite: (notification: NotificationItem) => void;
+  onDeclineInvite: (notification: NotificationItem) => void;
 }
 
 export default function WorkspaceHeader({
   activeRoom,
   activeWorkspace,
   memberCount,
+  currentUserName,
+  currentUserEmail,
+  currentUserInitial,
+  currentUserPhotoUrl,
+  currentUserBio,
+  currentUserStatus,
+  currentUserRole,
+  notifications,
   searchQuery,
   showFilePanel,
   isSummarizing,
@@ -43,7 +65,24 @@ export default function WorkspaceHeader({
   onToggleFilePanel,
   onOpenChannelSettings,
   onOpenSettings,
+  onOpenProfile,
+  onLogout,
+  onAcceptInvite,
+  onDeclineInvite,
 }: WorkspaceHeaderProps) {
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
+  const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
+
+  const notificationItems = useMemo(
+    () =>
+      notifications.map((item) => ({
+        ...item,
+        unread: item.unread && !readNotificationIds.includes(item.id),
+      })),
+    [notifications, readNotificationIds]
+  );
+
   return (
     <div className="flex h-16 shrink-0 items-center justify-between border-b border-gray-200 px-6">
       <div className="min-w-0">
@@ -111,10 +150,43 @@ export default function WorkspaceHeader({
             className="w-64 rounded-full bg-gray-100 py-1.5 pl-9 pr-4 text-sm outline-none transition-all focus:bg-white focus:ring-2 focus:ring-blue-200"
           />
         </div>
-        <button className="relative text-gray-400 hover:text-gray-600">
-          <Bell size={20} />
-          <span className="absolute right-0 top-0 h-2 w-2 rounded-full border-2 border-white bg-red-500" />
-        </button>
+        <NotificationDropdown
+          items={notificationItems}
+          open={showNotifications}
+          onToggle={() => {
+            setShowNotifications((current) => !current);
+            setShowProfile(false);
+          }}
+          onMarkAllRead={() =>
+            setReadNotificationIds((current) => [
+              ...new Set([
+                ...current,
+                ...notifications.map((item) => item.id),
+              ]),
+            ])
+          }
+          onAcceptInvite={onAcceptInvite}
+          onDeclineInvite={onDeclineInvite}
+        />
+        <UserProfileDropdown
+          name={currentUserName}
+          email={currentUserEmail}
+          initial={currentUserInitial}
+          photoUrl={currentUserPhotoUrl}
+          bio={currentUserBio}
+          status={currentUserStatus}
+          role={currentUserRole}
+          open={showProfile}
+          onToggle={() => {
+            setShowProfile((current) => !current);
+            setShowNotifications(false);
+          }}
+          onOpenProfile={() => {
+            setShowProfile(false);
+            onOpenProfile();
+          }}
+          onLogout={onLogout}
+        />
         <button
           type="button"
           onClick={onOpenSettings}
