@@ -43,15 +43,11 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex h-screen">
+    <div className="flex min-h-screen">
 
       {/* KIRI — Branded Panel */}
       <div className="hidden lg:flex w-[45%] bg-indigo-950 flex-col justify-between p-10 relative overflow-hidden">
         
-        {/* Background dekoratif */}
-        <div className="absolute w-72 h-72 rounded-full bg-white/[0.03] -top-16 -right-16" />
-        <div className="absolute w-52 h-52 rounded-full bg-white/[0.03] -bottom-12 -left-12" />
-
         {/* Logo */}
         <div className="flex items-center gap-3 relative z-10">
           <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center">
@@ -100,7 +96,7 @@ export default function LoginPage() {
       </div>
 
       {/* KANAN — Form Login */}
-      <div className="flex-1 flex flex-col justify-center px-8 sm:px-12 lg:px-16 bg-white">
+      <div className="flex-1 flex flex-col justify-center overflow-y-auto px-8 py-10 sm:px-12 lg:px-16 bg-white">
         <div className="w-full max-w-sm mx-auto space-y-6">
 
           {/* Heading */}

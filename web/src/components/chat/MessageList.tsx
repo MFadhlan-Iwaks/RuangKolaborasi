@@ -1,7 +1,7 @@
 // src/components/chat/MessageList.tsx
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 import { MessageSquareText } from 'lucide-react';
 import { Message } from '@/types';
 import MessageBubble from './MessageBubble';
@@ -15,6 +15,73 @@ interface MessageListProps {
   onTogglePin: (messageId: Message['id']) => void;
   onEdit: (message: Message) => void;
   onDelete: (messageId: Message['id']) => void;
+  onRetry: (message: Message) => void;
+  onToggleReaction: (messageId: Message['id'], emoji: string) => void;
+  onPreviewFile: (message: Message) => void;
+  onDownloadFile: (message: Message) => void;
+  onCopyFileLink: (message: Message) => void;
+  emptyActionLabel?: string;
+  onEmptyAction?: () => void;
+  searchQuery?: string;
+}
+
+function computeGrouping(messages: Message[]): Message[] {
+  // threshold in milliseconds (5 minutes)
+  const THRESHOLD = 5 * 60 * 1000;
+
+  function parseTimeToDateMs(timeStr: string) {
+    // Expect formats like 'HH:mm' or ISO; try to create a Date for today
+    const now = new Date();
+    // If it's ISO-ish, Date.parse may work
+    const iso = Date.parse(timeStr);
+    if (!Number.isNaN(iso)) return iso;
+
+    const parts = timeStr.split(':');
+    if (parts.length >= 2) {
+      const hours = parseInt(parts[0], 10);
+      const minutes = parseInt(parts[1], 10);
+      if (!Number.isNaN(hours) && !Number.isNaN(minutes)) {
+        const d = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes);
+        return d.getTime();
+      }
+    }
+
+    return NaN;
+  }
+
+  return messages.map((message, index) => {
+    const prevMessage = index > 0 ? messages[index - 1] : null;
+
+    let isGroupStart = true;
+
+    if (prevMessage) {
+      const currentSender =
+        message.senderId || message.user.replace(/\s+\(Kamu\)$/, '');
+      const prevSender =
+        prevMessage.senderId || prevMessage.user.replace(/\s+\(Kamu\)$/, '');
+
+      if (currentSender === prevSender) {
+        // try parsing times and check threshold
+        const currentMs = parseTimeToDateMs(message.time);
+        const prevMs = parseTimeToDateMs(prevMessage.time);
+
+        if (!Number.isNaN(currentMs) && !Number.isNaN(prevMs)) {
+          const diff = Math.abs(currentMs - prevMs);
+          if (diff <= THRESHOLD) {
+            isGroupStart = false;
+          }
+        } else {
+          // fallback: same sender -> group
+          isGroupStart = false;
+        }
+      }
+    }
+
+    return {
+      ...message,
+      isGroupStart,
+    };
+  });
 }
 
 export default function MessageList({
@@ -26,15 +93,24 @@ export default function MessageList({
   onTogglePin,
   onEdit,
   onDelete,
+  onRetry,
+  onToggleReaction,
+  onPreviewFile,
+  onDownloadFile,
+  onCopyFileLink,
+  emptyActionLabel,
+  onEmptyAction,
+  searchQuery = '',
 }: MessageListProps) {
   const endRef = useRef<HTMLDivElement>(null);
+  const messagesWithGrouping = useMemo(() => computeGrouping(messages), [messages]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-6">
+    <div className="flex-1 overflow-y-auto p-6 space-y-0">
 
       {/* Indikator tanggal */}
       <div className="flex items-center justify-center my-6">
@@ -55,16 +131,31 @@ export default function MessageList({
           <p className="mt-1 max-w-sm text-xs leading-5 text-gray-500">
             {emptyDescription}
           </p>
+          {emptyActionLabel && onEmptyAction && (
+            <button
+              type="button"
+              onClick={onEmptyAction}
+              className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-blue-700"
+            >
+              {emptyActionLabel}
+            </button>
+          )}
         </div>
       ) : (
-        messages.map((msg) => (
+        messagesWithGrouping.map((msg) => (
           <MessageBubble
             key={msg.id}
             message={msg}
+            searchQuery={searchQuery}
             onReply={onReply}
             onTogglePin={onTogglePin}
             onEdit={onEdit}
             onDelete={onDelete}
+            onRetry={onRetry}
+            onToggleReaction={onToggleReaction}
+            onPreviewFile={onPreviewFile}
+            onDownloadFile={onDownloadFile}
+            onCopyFileLink={onCopyFileLink}
           />
         ))
       )}

@@ -2,7 +2,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Archive, Folder, MessageSquare, Plus, Star, Trash2 } from 'lucide-react';
+import { Archive, Folder, MessageSquare, Plus, RotateCcw, Star, Trash2 } from 'lucide-react';
 import { Room, Status, TeamMember } from '@/types';
 import StatusMenu from '@/components/ui/StatusMenu';
 
@@ -12,15 +12,18 @@ interface SidebarProps {
   workspaceColor: string;
   currentUserName: string;
   currentUserInitial: string;
+  currentUserPhotoUrl?: string;
   currentUserStatus: Status;
   memberCount: number;
   members: TeamMember[];
   rooms: Room[];
   activeRoomId: string;
+  canManageChannels: boolean;
   onRoomChange: (roomId: string) => void;
   onCreateChannel: () => void;
   onDeleteChannel: () => void;
   onToggleFavoriteChannel: (roomId: string) => void;
+  onRestoreChannel: (roomId: string) => void;
   onStatusChange: (status: Status) => void;
 }
 
@@ -30,15 +33,18 @@ export default function Sidebar({
   workspaceColor,
   currentUserName,
   currentUserInitial,
+  currentUserPhotoUrl,
   currentUserStatus,
   memberCount,
   members,
   rooms,
   activeRoomId,
+  canManageChannels,
   onRoomChange,
   onCreateChannel,
   onDeleteChannel,
   onToggleFavoriteChannel,
+  onRestoreChannel,
   onStatusChange,
 }: SidebarProps) {
   const [showStatusMenu, setShowStatusMenu] = useState(false);
@@ -80,7 +86,19 @@ export default function Sidebar({
             </span>
           )}
         </button>
-        {!room.archived && (
+        {canManageChannels && room.archived ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRestoreChannel(room.id);
+            }}
+            title="Pulihkan channel"
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-gray-400 opacity-0 transition-opacity hover:bg-blue-50 hover:text-blue-600 group-hover:opacity-100"
+          >
+            <RotateCcw size={13} />
+          </button>
+        ) : canManageChannels ? (
           <button
             type="button"
             onClick={(e) => {
@@ -96,7 +114,7 @@ export default function Sidebar({
           >
             <Star size={13} fill={room.favorite ? 'currentColor' : 'none'} />
           </button>
-        )}
+        ) : null}
       </div>
     );
   }
@@ -110,8 +128,11 @@ export default function Sidebar({
           <div className={`w-8 h-8 ${workspaceColor} text-white rounded-lg flex items-center justify-center font-bold text-sm shadow-sm`}>
             {workspaceInitials}
           </div>
-          <div className="min-w-0">
-            <h1 className="font-bold text-sm text-gray-900 leading-tight">
+          <div className="min-w-0 flex-1">
+            <h1
+              title={workspaceName}
+              className="truncate font-bold text-sm text-gray-900 leading-tight"
+            >
               {workspaceName}
             </h1>
             <p className="text-xs text-gray-500 font-medium">
@@ -139,6 +160,7 @@ export default function Sidebar({
 
           <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 px-2 flex justify-between items-center">
             Ruang Diskusi
+            {canManageChannels && (
             <span className="flex items-center gap-1">
               <button
                 type="button"
@@ -157,6 +179,7 @@ export default function Sidebar({
                 <Trash2 size={14} />
               </button>
             </span>
+            )}
           </h2>
           <div className="space-y-0.5">
             {activeRooms.map((room) => renderRoom(room))}
@@ -189,7 +212,7 @@ export default function Sidebar({
               .filter((member) => member.status === 'active')
               .map((member) => {
                 const memberStatus = member.profileStatus || 'online';
-                const isOffline = memberStatus === 'offline';
+                const memberBio = member.bio || 'Siap diskusi di ruang kerja.';
 
                 return (
               <div
@@ -197,9 +220,18 @@ export default function Sidebar({
                 className="w-full flex items-center space-x-3 px-2 py-2 rounded-md text-gray-600"
               >
                 <div className="relative">
-                  <div className={`w-6 h-6 rounded-full text-white text-[10px] font-bold flex items-center justify-center ${member.avatar}`}>
-                    {member.name.charAt(0)}
-                  </div>
+                  {member.photoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={member.photoUrl}
+                      alt={member.name}
+                      className="h-6 w-6 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className={`w-6 h-6 rounded-full text-white text-[10px] font-bold flex items-center justify-center ${member.avatar}`}>
+                      {member.name.charAt(0)}
+                    </div>
+                  )}
                   <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 ${
                     memberStatus === 'online'
                       ? 'bg-green-500'
@@ -214,10 +246,8 @@ export default function Sidebar({
                   <p className="truncate text-sm font-medium text-gray-700">
                     {member.name}
                   </p>
-                  <p className={`text-[10px] font-medium uppercase tracking-wide ${
-                    isOffline ? 'text-gray-500' : memberStatus === 'idle' ? 'text-amber-500' : memberStatus === 'dnd' ? 'text-red-500' : 'text-green-600'
-                  }`}>
-                    {memberStatus}
+                  <p className="truncate text-xs text-gray-400">
+                    {memberBio}
                   </p>
                 </div>
               </div>
@@ -237,6 +267,7 @@ export default function Sidebar({
           onToggle={() => setShowStatusMenu(!showStatusMenu)}
           userName={currentUserName}
           userInitial={currentUserInitial}
+          userPhotoUrl={currentUserPhotoUrl}
         />
       </div>
 

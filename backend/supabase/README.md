@@ -9,6 +9,7 @@ Run migrations from the `migrations` folder in Supabase SQL Editor.
 3. `migrations/003_allow_profile_insert.sql`
 4. `migrations/004_persist_workspace_ui_state.sql`
 5. `migrations/005_profile_status_realtime.sql`
+6. `migrations/006_secure_invite_codes_and_channel_rbac.sql`
 
 ## Notes
 

@@ -1,0 +1,7 @@
+# JVM/Gradle crash diagnostics
+hs_err_pid*.log
+replay_pid*.log
+*.hprof
+
+# Local logs
+*.log

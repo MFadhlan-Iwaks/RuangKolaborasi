@@ -44,6 +44,7 @@ export interface Database {
           description: string | null;
           short_name: string | null;
           color: string | null;
+          invite_code: string;
           owner_id: string;
           created_at: string;
           updated_at: string;
@@ -54,6 +55,7 @@ export interface Database {
           description?: string | null;
           short_name?: string | null;
           color?: string | null;
+          invite_code?: string;
           owner_id: string;
           created_at?: string;
           updated_at?: string;
@@ -63,6 +65,7 @@ export interface Database {
           description?: string | null;
           short_name?: string | null;
           color?: string | null;
+          invite_code?: string;
           updated_at?: string;
         };
         Relationships: [];
