@@ -102,14 +102,20 @@ export default function NotificationDropdown({
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-start justify-between gap-2">
-                        <p className="truncate text-sm font-bold text-gray-900">
+                        <p
+                          title={item.title}
+                          className="truncate text-sm font-bold text-gray-900"
+                        >
                           {item.title}
                         </p>
                         {item.unread && (
                           <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-blue-500" />
                         )}
                       </div>
-                      <p className="line-clamp-2 text-xs leading-5 text-gray-500">
+                      <p
+                        title={item.description}
+                        className="line-clamp-2 break-words text-xs leading-5 text-gray-500"
+                      >
                         {item.description}
                       </p>
                       <p className="mt-1 text-[11px] font-medium text-gray-400">
@@ -124,14 +130,16 @@ export default function NotificationDropdown({
                                 onClick={() => onAcceptInvite(item)}
                                 className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-blue-700"
                               >
-                                Gabung
+                                {item.inviteMode === 'outgoing'
+                                  ? 'Tandai diterima'
+                                  : 'Gabung'}
                               </button>
                               <button
                                 type="button"
                                 onClick={() => onDeclineInvite(item)}
                                 className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-600 transition-colors hover:bg-gray-50"
                               >
-                                Tolak
+                                {item.inviteMode === 'outgoing' ? 'Batalkan' : 'Tolak'}
                               </button>
                             </div>
                           ) : (

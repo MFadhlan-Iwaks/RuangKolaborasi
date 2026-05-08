@@ -84,14 +84,10 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="flex h-screen">
+    <div className="flex min-h-screen">
 
       {/* KIRI — Branded Panel */}
       <div className="hidden lg:flex w-[45%] bg-indigo-950 flex-col justify-between p-10 relative overflow-hidden">
-
-        {/* Background dekoratif */}
-        <div className="absolute w-72 h-72 rounded-full bg-white/[0.03] -top-16 -right-16" />
-        <div className="absolute w-52 h-52 rounded-full bg-white/[0.03] -bottom-12 -left-12" />
 
         {/* Logo */}
         <div className="flex items-center gap-3 relative z-10">

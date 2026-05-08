@@ -1,6 +1,6 @@
 'use client';
 
-import { LogOut, Settings, UserRound } from 'lucide-react';
+import { LogOut, UserRound } from 'lucide-react';
 import { Status } from '@/types';
 import { STATUS_CONFIG } from '@/components/ui/StatusMenu';
 
@@ -11,7 +11,6 @@ interface UserProfileDropdownProps {
   photoUrl?: string;
   bio: string;
   status: Status;
-  role?: string;
   open: boolean;
   onToggle: () => void;
   onOpenProfile: () => void;
@@ -25,7 +24,6 @@ export default function UserProfileDropdown({
   photoUrl,
   bio,
   status,
-  role,
   open,
   onToggle,
   onOpenProfile,
@@ -47,6 +45,7 @@ export default function UserProfileDropdown({
       >
         <div className="relative">
           {photoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
             <img
               src={photoUrl}
               alt={name}
@@ -75,6 +74,7 @@ export default function UserProfileDropdown({
             <div className="flex items-center gap-3">
               <div className="relative">
                 {photoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={photoUrl}
                     alt={name}
@@ -92,9 +92,6 @@ export default function UserProfileDropdown({
               <div className="min-w-0">
                 <p className="truncate text-sm font-bold text-gray-900">{name}</p>
                 <p className="truncate text-xs text-gray-500">{bio}</p>
-                <p className="mt-1 text-[11px] font-bold uppercase tracking-wide text-gray-400">
-                  {role ?? 'Member'}
-                </p>
                 <p className="mt-0.5 truncate text-[11px] text-gray-400">{email}</p>
               </div>
             </div>
@@ -108,14 +105,6 @@ export default function UserProfileDropdown({
             >
               <UserRound size={16} className="text-gray-400" />
               Profil saya
-            </button>
-            <button
-              type="button"
-              onClick={onOpenProfile}
-              className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
-            >
-              <Settings size={16} className="text-gray-400" />
-              Pengaturan akun
             </button>
           </div>
 

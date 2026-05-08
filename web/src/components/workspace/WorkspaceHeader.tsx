@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   SlidersHorizontal,
   Files,
@@ -25,7 +25,6 @@ interface WorkspaceHeaderProps {
   currentUserPhotoUrl?: string;
   currentUserBio: string;
   currentUserStatus: Status;
-  currentUserRole?: string;
   notifications: NotificationItem[];
   searchQuery: string;
   showFilePanel: boolean;
@@ -53,7 +52,6 @@ export default function WorkspaceHeader({
   currentUserPhotoUrl,
   currentUserBio,
   currentUserStatus,
-  currentUserRole,
   notifications,
   searchQuery,
   showFilePanel,
@@ -73,6 +71,10 @@ export default function WorkspaceHeader({
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
+  const actionsRef = useRef<HTMLDivElement>(null);
+  const headerDescription = `${
+    activeRoom?.description ?? activeWorkspace.description
+  } - ${memberCount} anggota di ${activeWorkspace.name}.`;
 
   const notificationItems = useMemo(
     () =>
@@ -83,25 +85,50 @@ export default function WorkspaceHeader({
     [notifications, readNotificationIds]
   );
 
+  useEffect(() => {
+    function handlePointerDown(event: PointerEvent) {
+      if (!actionsRef.current?.contains(event.target as Node)) {
+        setShowNotifications(false);
+        setShowProfile(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setShowNotifications(false);
+        setShowProfile(false);
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
   return (
-    <div className="flex h-16 shrink-0 items-center justify-between border-b border-gray-200 px-6">
-      <div className="min-w-0">
+    <div className="flex h-16 shrink-0 items-center justify-between gap-4 border-b border-gray-200 px-6">
+      <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <Hash size={18} className="text-gray-400" />
           <h2 className="truncate text-lg font-bold text-gray-900">
             {activeRoom?.name ?? 'Tanpa Channel'}
           </h2>
         </div>
-        <p className="truncate text-xs text-gray-500">
-          {activeRoom?.description ?? activeWorkspace.description} {memberCount}{' '}
-          anggota di {activeWorkspace.name}.
+        <p
+          title={headerDescription}
+          className="max-w-full truncate text-xs text-gray-500"
+        >
+          {headerDescription}
         </p>
       </div>
 
-      <div className="flex items-center space-x-4">
+      <div ref={actionsRef} className="flex shrink-0 items-center space-x-2 lg:space-x-3">
         <button
           onClick={onInvite}
-          className="hidden items-center space-x-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 md:flex"
+          className="hidden items-center space-x-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 lg:flex"
         >
           <UserPlus size={16} />
           <span>Invite</span>
@@ -109,7 +136,7 @@ export default function WorkspaceHeader({
         <button
           onClick={onSummarize}
           disabled={isSummarizing || !canSummarize}
-          className="hidden items-center space-x-1.5 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-1.5 text-sm font-semibold text-indigo-600 transition-colors hover:bg-indigo-100 disabled:opacity-50 md:flex"
+          className="hidden items-center space-x-1.5 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-1.5 text-sm font-semibold text-indigo-600 transition-colors hover:bg-indigo-100 disabled:opacity-50 lg:flex"
         >
           {isSummarizing ? (
             <Loader2 size={16} className="animate-spin" />
@@ -120,7 +147,7 @@ export default function WorkspaceHeader({
         </button>
         <button
           onClick={onToggleFilePanel}
-          className={`hidden items-center space-x-1.5 rounded-lg border px-3 py-1.5 text-sm font-semibold transition-colors md:flex ${
+          className={`hidden items-center space-x-1.5 rounded-lg border px-3 py-1.5 text-sm font-semibold transition-colors lg:flex ${
             showFilePanel
               ? 'border-blue-100 bg-blue-50 text-blue-600 hover:bg-blue-100'
               : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
@@ -132,17 +159,18 @@ export default function WorkspaceHeader({
         <button
           onClick={onOpenChannelSettings}
           disabled={!activeRoom}
-          className="hidden items-center space-x-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 md:flex"
+          className="hidden items-center space-x-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 lg:flex"
         >
           <SlidersHorizontal size={16} />
           <span>Channel</span>
         </button>
-        <div className="relative hidden md:block">
+        <div className="relative hidden xl:block">
           <Search
             size={16}
             className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
           />
           <input
+            id="workspace-search"
             type="text"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
@@ -175,7 +203,6 @@ export default function WorkspaceHeader({
           photoUrl={currentUserPhotoUrl}
           bio={currentUserBio}
           status={currentUserStatus}
-          role={currentUserRole}
           open={showProfile}
           onToggle={() => {
             setShowProfile((current) => !current);

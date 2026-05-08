@@ -18,6 +18,7 @@ interface StatusMenuProps {
   onToggle: () => void;
   userName: string;
   userInitial: string;
+  userPhotoUrl?: string;
 }
 
 export default function StatusMenu({
@@ -27,6 +28,7 @@ export default function StatusMenu({
   onToggle,
   userName,
   userInitial,
+  userPhotoUrl,
 }: StatusMenuProps) {
   const current = STATUS_CONFIG[status];
   const CurrentIcon = current.icon;
@@ -39,9 +41,18 @@ export default function StatusMenu({
         className="flex items-center space-x-3 cursor-pointer hover:bg-gray-50 p-2 -mx-2 rounded-lg transition-colors"
       >
         <div className="relative">
-          <div className="w-9 h-9 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center shadow-sm">
-            {userInitial}
-          </div>
+          {userPhotoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={userPhotoUrl}
+              alt={userName}
+              className="h-9 w-9 rounded-full object-cover shadow-sm"
+            />
+          ) : (
+            <div className="w-9 h-9 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center shadow-sm">
+              {userInitial}
+            </div>
+          )}
           <div className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 ${current.bgColor} border-[2.5px] border-white rounded-full transition-colors duration-300`} />
         </div>
         <div className="flex-1 min-w-0">

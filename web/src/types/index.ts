@@ -14,12 +14,30 @@ export interface User {
   avatar: string; 
 }
 
+export interface CurrentUser {
+  id: string;
+  name: string;
+  email: string;
+  initial: string;
+  avatar: string;
+  photoUrl?: string;
+  bio: string;
+  status: Status;
+}
+
 export interface Message {
   id: number | string;
   user: string;
   avatar: string;
   time: string;
   type: MessageType;
+  isMine?: boolean;
+  deliveryStatus?: 'sending' | 'sent' | 'failed';
+  reactions?: Array<{
+    emoji: string;
+    count: number;
+    reacted?: boolean;
+  }>;
   text?: string;
   fileName?: string;
   fileSize?: string;
@@ -60,6 +78,7 @@ export interface TeamMember {
   status: 'active' | 'pending';
   profileStatus?: Status;
   avatar: string;
+  photoUrl?: string;
   bio?: string;
 }
 
@@ -73,6 +92,25 @@ export interface NotificationItem {
   inviteCode?: string;
   inviteWorkspaceName?: string;
   inviteStatus?: 'pending' | 'accepted' | 'declined';
+  inviteMode?: 'incoming' | 'outgoing';
+}
+
+export interface PendingInvitation {
+  id: string;
+  workspaceId?: string;
+  workspaceName: string;
+  inviterName: string;
+  invitedEmail?: string;
+  role?: TeamMember['role'];
+  inviteCode: string;
+  status: 'pending' | 'accepted' | 'declined';
+}
+
+export interface ToastMessage {
+  id: string;
+  type: 'success' | 'error' | 'info';
+  title: string;
+  description?: string;
 }
 
 export interface StatusConfig {

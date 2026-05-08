@@ -54,7 +54,7 @@ export default function UserProfileModal({
   }
 
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-gray-900/40 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 p-4 backdrop-blur-sm">
       <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
           <div>
@@ -74,6 +74,7 @@ export default function UserProfileModal({
           <div className="flex items-center gap-4">
             <div className="relative">
               {draftPhotoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={draftPhotoUrl}
                   alt={name}
