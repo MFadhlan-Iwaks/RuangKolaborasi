@@ -305,7 +305,16 @@ export default function WorkspacePage() {
             return;
           }
 
-          const nextMessage = toMessage(row, currentUser);
+          // Lookup sender name from membersByWorkspace to fix realtime missing sender_name
+          const senderMember = membersByWorkspace[activeWorkspaceId]?.find(
+            (member) => member.id === row.sender_id
+          );
+          const rowWithSenderName: BootstrapMessageRow = {
+            ...row,
+            sender_name: row.sender_name || senderMember?.full_name || 'Anggota',
+          };
+
+          const nextMessage = toMessage(rowWithSenderName, currentUser);
 
           setMessagesByWorkspace((prev) => {
             const currentMessages = prev[activeWorkspaceId]?.[activeRoomId] ?? [];
@@ -329,7 +338,7 @@ export default function WorkspacePage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [activeRoomId, activeWorkspaceId, currentUser]);
+  }, [activeRoomId, activeWorkspaceId, currentUser, membersByWorkspace]);
 
   useEffect(() => {
     if (!currentUserId) return undefined;
