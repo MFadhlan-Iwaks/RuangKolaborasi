@@ -17,6 +17,11 @@ function createApp() {
   }));
   app.use(express.json({ limit: '20mb' }));
 
+  // Root route: redirect to health check for convenience
+  app.get('/', (req, res) => {
+    res.redirect('/api/health');
+  });
+
   app.use('/api/health', healthRoutes);
   app.use('/api/auth', authRoutes);
   app.use('/api/ai', aiRoutes);

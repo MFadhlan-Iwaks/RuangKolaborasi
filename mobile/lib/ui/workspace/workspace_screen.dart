@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -33,9 +34,8 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final ImagePicker _picker = ImagePicker();
-  final String activeRoom = 'Diskusi Utama';
   bool _isSearching = false;
-  int? _editingMessageId;
+  String? _editingMessageId;
 
   late AudioRecorder _audioRecorder;
   bool _isRecording = false;
@@ -46,6 +46,9 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
     _audioRecorder = AudioRecorder();
     _messageController.addListener(() {
       if (mounted) setState(() {});
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(workspaceProvider.notifier).bootstrap();
     });
   }
 
@@ -68,18 +71,20 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
     }
   }
 
-  void _handleSendMessage() {
+  Future<void> _handleSendMessage() async {
     if (_messageController.text.trim().isEmpty) return;
 
     if (_editingMessageId != null) {
-      ref
-          .read(messagesProvider.notifier)
+      await ref
+          .read(workspaceProvider.notifier)
           .editMessage(_editingMessageId!, _messageController.text);
       setState(() {
         _editingMessageId = null;
       });
     } else {
-      ref.read(messagesProvider.notifier).addMessage(_messageController.text);
+      await ref
+          .read(workspaceProvider.notifier)
+          .sendMessage(_messageController.text);
       WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
     }
     _messageController.clear();
@@ -107,25 +112,13 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
 
       if (result != null) {
         PlatformFile file = result.files.first;
-        MessageType type = MessageType.file;
-        final ext = file.extension?.toLowerCase();
-        if (['jpg', 'jpeg', 'png', 'gif'].contains(ext)) {
-          type = MessageType.image;
-        } else if (['mp4', 'mov', 'avi'].contains(ext)) {
-          type = MessageType.video;
-        } else if (['mp3', 'wav', 'm4a'].contains(ext)) {
-          type = MessageType.audio;
+        if (file.path != null) {
+          await _uploadFileToActiveChannel(
+            path: file.path!,
+            fileName: file.name,
+            fileSize: file.size,
+          );
         }
-
-        ref
-            .read(messagesProvider.notifier)
-            .addFileMessage(
-              type: type,
-              fileName: file.name,
-              fileSize: '${(file.size / 1024).toStringAsFixed(1)} KB',
-              filePath: file.path,
-            );
-        WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
       }
     } catch (e) {
       debugPrint('Error picking file: $e');
@@ -184,17 +177,59 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
     try {
       final XFile? photo = await _picker.pickImage(source: source);
       if (photo != null) {
-        ref
-            .read(messagesProvider.notifier)
-            .addFileMessage(
-              type: MessageType.image,
-              fileName: photo.name,
-              filePath: photo.path,
-            );
-        WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+        final file = File(photo.path);
+        await _uploadFileToActiveChannel(
+          path: photo.path,
+          fileName: photo.name,
+          fileSize: await file.length(),
+        );
       }
     } catch (e) {
       debugPrint('Error taking photo: $e');
+    }
+  }
+
+  Future<void> _uploadFileToActiveChannel({
+    required String path,
+    required String fileName,
+    required int fileSize,
+    String? caption,
+  }) async {
+    final bytes = await File(path).readAsBytes();
+    await ref
+        .read(workspaceProvider.notifier)
+        .uploadFile(
+          fileName: fileName,
+          mimeType: _mimeTypeForFileName(fileName),
+          fileSize: fileSize,
+          contentBase64: base64Encode(bytes),
+          caption: caption,
+        );
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+  }
+
+  String _mimeTypeForFileName(String fileName) {
+    final ext = p.extension(fileName).toLowerCase().replaceFirst('.', '');
+    switch (ext) {
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'gif':
+        return 'image/gif';
+      case 'mp4':
+        return 'video/mp4';
+      case 'mov':
+        return 'video/quicktime';
+      case 'mp3':
+        return 'audio/mpeg';
+      case 'wav':
+        return 'audio/wav';
+      case 'pdf':
+        return 'application/pdf';
+      default:
+        return 'application/octet-stream';
     }
   }
 
@@ -271,15 +306,11 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                         source: ImageSource.camera,
                       );
                       if (video != null) {
-                        ref
-                            .read(messagesProvider.notifier)
-                            .addFileMessage(
-                              type: MessageType.video,
-                              fileName: video.name,
-                              filePath: video.path,
-                            );
-                        WidgetsBinding.instance.addPostFrameCallback(
-                          (_) => _scrollToBottom(),
+                        final file = File(video.path);
+                        await _uploadFileToActiveChannel(
+                          path: video.path,
+                          fileName: video.name,
+                          fileSize: await file.length(),
                         );
                       }
                     },
@@ -348,10 +379,14 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final workspaceState = ref.watch(workspaceProvider);
     final messages = ref.watch(filteredMessagesProvider);
     final geminiState = ref.watch(geminiProvider);
     final wallpaper = ref.watch(wallpaperProvider);
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final activeChannel = workspaceState.activeChannel;
+    final activeWorkspace = workspaceState.activeWorkspace;
+    final memberCount = workspaceState.activeMembers.length;
 
     return Scaffold(
       backgroundColor: isDark ? AppTheme.zinc950_bg : Colors.white,
@@ -378,13 +413,15 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    activeRoom,
+                    activeChannel?.name ?? activeWorkspace?.name ?? 'Workspace',
                     style: TextStyle(
                       color: isDark ? Colors.white : Colors.black,
                     ),
                   ),
                   Text(
-                    '4 anggota tim ada di dalam ruang ini',
+                    memberCount == 0
+                        ? 'Memuat anggota...'
+                        : '$memberCount anggota di workspace ini',
                     style: TextStyle(
                       fontSize: 10,
                       color: isDark ? AppTheme.zinc400 : AppTheme.zinc500,
@@ -455,19 +492,49 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
             : null,
         child: Column(
           children: [
-            Expanded(
-              child: ListView.builder(
-                controller: _scrollController,
-                padding: const EdgeInsets.all(16),
-                itemCount: messages.length,
-                itemBuilder: (context, index) {
-                  final message = messages[index];
-                  return _MessageBubble(
-                    message: message,
-                    onEdit: () => _startEditing(message),
-                  );
-                },
+            if (workspaceState.error != null)
+              MaterialBanner(
+                backgroundColor: isDark ? AppTheme.zinc900 : AppTheme.indigo50,
+                content: Text(
+                  workspaceState.error!,
+                  style: TextStyle(
+                    color: isDark ? Colors.white : AppTheme.zinc900,
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () =>
+                        ref.read(workspaceProvider.notifier).bootstrap(),
+                    child: const Text('Coba lagi'),
+                  ),
+                ],
               ),
+            Expanded(
+              child: workspaceState.isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : messages.isEmpty
+                  ? Center(
+                      child: Text(
+                        activeChannel == null
+                            ? 'Belum ada channel di workspace ini.'
+                            : 'Belum ada pesan di ${activeChannel.name}.',
+                        style: TextStyle(
+                          color: isDark ? Colors.white70 : AppTheme.zinc500,
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.all(16),
+                      itemCount: messages.length,
+                      itemBuilder: (context, index) {
+                        final message = messages[index];
+                        return _MessageBubble(
+                          message: message,
+                          onEdit: () => _startEditing(message),
+                        );
+                      },
+                    ),
             ),
             if (_editingMessageId != null)
               Container(
@@ -517,6 +584,8 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
 
   Widget _buildDrawer(bool isDark) {
     final user = ref.watch(userProvider);
+    final workspaceState = ref.watch(workspaceProvider);
+    final activeWorkspace = workspaceState.activeWorkspace;
 
     return Drawer(
       backgroundColor: isDark ? AppTheme.zinc900 : Colors.white,
@@ -526,10 +595,10 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
             width: double.infinity,
             padding: const EdgeInsets.fromLTRB(20, 48, 20, 20),
             decoration: const BoxDecoration(color: AppTheme.indigo950),
-            child: const Column(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   'RuangKolaborasi',
                   style: TextStyle(
                     color: Colors.white,
@@ -537,10 +606,12 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                SizedBox(height: 4),
+                const SizedBox(height: 4),
                 Text(
-                  'Workspace Tim',
-                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                  activeWorkspace?.name ?? 'Workspace Tim',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
                 ),
               ],
             ),
@@ -550,49 +621,147 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
               padding: EdgeInsets.zero,
               children: [
                 const SizedBox(height: 8),
-                ListTile(
-                  leading: Icon(
-                    LucideIcons.messageSquare,
-                    color: isDark ? Colors.white70 : Colors.black87,
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
                   ),
-                  title: Text(
-                    'Diskusi Utama',
-                    style: TextStyle(
-                      color: isDark ? Colors.white : Colors.black,
-                    ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'WORKSPACE',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: isDark
+                                ? AppTheme.zinc500
+                                : AppTheme.zinc400,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Refresh',
+                        onPressed: () =>
+                            ref.read(workspaceProvider.notifier).bootstrap(),
+                        icon: Icon(
+                          LucideIcons.refreshCw,
+                          size: 16,
+                          color: isDark ? Colors.white70 : AppTheme.zinc700,
+                        ),
+                      ),
+                    ],
                   ),
-                  selected: true,
-                  selectedTileColor: isDark
-                      ? AppTheme.indigo600.withOpacity(0.2)
-                      : AppTheme.indigo50,
-                  onTap: () => Navigator.pop(context),
                 ),
-                ListTile(
-                  leading: Icon(
-                    LucideIcons.folder,
-                    color: isDark ? Colors.white70 : Colors.black87,
-                  ),
-                  title: Text(
-                    'Pengembangan API',
-                    style: TextStyle(
-                      color: isDark ? Colors.white : Colors.black,
+                for (final workspace in workspaceState.workspaces)
+                  ListTile(
+                    leading: CircleAvatar(
+                      radius: 14,
+                      backgroundColor: AppTheme.indigo600,
+                      child: Text(
+                        workspace.shortName.isEmpty
+                            ? _profileInitials(workspace.name)
+                            : workspace.shortName,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
-                  ),
-                  onTap: () => Navigator.pop(context),
-                ),
-                ListTile(
-                  leading: Icon(
-                    LucideIcons.folder,
-                    color: isDark ? Colors.white70 : Colors.black87,
-                  ),
-                  title: Text(
-                    'UI/UX Design',
-                    style: TextStyle(
-                      color: isDark ? Colors.white : Colors.black,
+                    title: Text(
+                      workspace.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: isDark ? Colors.white : Colors.black,
+                      ),
                     ),
+                    selected: workspace.id == workspaceState.activeWorkspaceId,
+                    selectedTileColor: isDark
+                        ? AppTheme.indigo600.withOpacity(0.2)
+                        : AppTheme.indigo50,
+                    onTap: () {
+                      ref
+                          .read(workspaceProvider.notifier)
+                          .selectWorkspace(workspace.id);
+                      Navigator.pop(context);
+                    },
                   ),
-                  onTap: () => Navigator.pop(context),
+                const Divider(),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'GROUP CHAT',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: isDark
+                                ? AppTheme.zinc500
+                                : AppTheme.zinc400,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Tambah group chat',
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _showCreateChannelDialog(isDark);
+                        },
+                        icon: Icon(
+                          LucideIcons.plus,
+                          size: 18,
+                          color: isDark ? Colors.white70 : AppTheme.zinc700,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+                for (final channel in workspaceState.activeChannels)
+                  ListTile(
+                    leading: Icon(
+                      channel.favorite
+                          ? LucideIcons.star
+                          : LucideIcons.messageSquare,
+                      color: isDark ? Colors.white70 : Colors.black87,
+                    ),
+                    title: Text(
+                      channel.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: isDark ? Colors.white : Colors.black,
+                      ),
+                    ),
+                    subtitle: channel.description.isEmpty
+                        ? null
+                        : Text(
+                            channel.description,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: isDark
+                                  ? AppTheme.zinc500
+                                  : AppTheme.zinc500,
+                            ),
+                          ),
+                    selected: channel.id == workspaceState.activeChannelId,
+                    selectedTileColor: isDark
+                        ? AppTheme.indigo600.withOpacity(0.2)
+                        : AppTheme.indigo50,
+                    onTap: () {
+                      ref
+                          .read(workspaceProvider.notifier)
+                          .selectChannel(channel.id);
+                      Navigator.pop(context);
+                    },
+                  ),
                 const Divider(),
                 Padding(
                   padding: const EdgeInsets.symmetric(
@@ -600,7 +769,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                     vertical: 8,
                   ),
                   child: Text(
-                    'PESAN LANGSUNG',
+                    'ANGGOTA WORKSPACE',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
@@ -608,9 +777,35 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                     ),
                   ),
                 ),
-                _buildDMItem('Rezza', Colors.blue, isDark),
-                _buildDMItem('Sammi Zaki', Colors.teal, isDark),
-                _buildDMItem('Gibran', Colors.amber, isDark),
+                for (final member in workspaceState.activeMembers)
+                  ListTile(
+                    leading: CircleAvatar(
+                      radius: 13,
+                      backgroundColor: AppTheme.indigo600,
+                      child: Text(
+                        _profileInitials(member.fullName),
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    title: Text(
+                      member.fullName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: isDark ? Colors.white : Colors.black,
+                      ),
+                    ),
+                    subtitle: Text(
+                      member.role,
+                      style: TextStyle(
+                        color: isDark ? AppTheme.zinc500 : AppTheme.zinc500,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -845,9 +1040,52 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
   }
 
   void _handleLogout() {
+    ref.read(workspaceProvider.notifier).clear();
     ref.read(authProvider.notifier).logout();
     Navigator.pop(context);
     Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+  }
+
+  void _showCreateChannelDialog(bool isDark) {
+    final controller = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: isDark ? AppTheme.zinc900 : Colors.white,
+        title: Text(
+          'Group chat baru',
+          style: TextStyle(color: isDark ? Colors.white : Colors.black),
+        ),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          style: TextStyle(color: isDark ? Colors.white : Colors.black),
+          decoration: const InputDecoration(hintText: 'Nama group chat'),
+          onSubmitted: (_) async {
+            await ref
+                .read(workspaceProvider.notifier)
+                .createChannel(controller.text);
+            if (context.mounted) Navigator.pop(context);
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              await ref
+                  .read(workspaceProvider.notifier)
+                  .createChannel(controller.text);
+              if (context.mounted) Navigator.pop(context);
+            },
+            child: const Text('Buat'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showEditProfileSheet(bool isDark) {
@@ -1041,14 +1279,12 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
       });
 
       if (path != null) {
-        ref
-            .read(messagesProvider.notifier)
-            .addFileMessage(
-              type: MessageType.audio,
-              fileName: 'Pesan Suara',
-              filePath: path,
-            );
-        WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+        final file = File(path);
+        await _uploadFileToActiveChannel(
+          path: path,
+          fileName: p.basename(path),
+          fileSize: await file.length(),
+        );
       }
     } catch (e) {
       debugPrint('Error stopping recording: $e');
@@ -1141,7 +1377,9 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                   border: InputBorder.none,
                 ),
                 maxLines: null,
-                onSubmitted: (_) => _handleSendMessage(),
+                onSubmitted: (_) {
+                  _handleSendMessage();
+                },
               ),
             ),
           ),
@@ -1163,7 +1401,9 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
             )
           else
             IconButton(
-              onPressed: _handleSendMessage,
+              onPressed: () {
+                _handleSendMessage();
+              },
               icon: Icon(
                 _editingMessageId != null
                     ? LucideIcons.check
@@ -1478,7 +1718,7 @@ class _MessageBubble extends ConsumerWidget {
               ),
               onTap: () {
                 ref
-                    .read(messagesProvider.notifier)
+                    .read(workspaceProvider.notifier)
                     .deleteMessageForMe(message.id);
                 Navigator.pop(context);
               },
@@ -1492,7 +1732,7 @@ class _MessageBubble extends ConsumerWidget {
                 ),
                 onTap: () {
                   ref
-                      .read(messagesProvider.notifier)
+                      .read(workspaceProvider.notifier)
                       .deleteMessageForEveryone(message.id);
                   Navigator.pop(context);
                 },
@@ -1505,7 +1745,8 @@ class _MessageBubble extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final bool isMe = message.user.contains('(Kamu)');
+    final authUser = ref.watch(authProvider).currentUser;
+    final bool isMe = message.senderId == authUser?.id;
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final currentUser = ref.watch(userProvider);
     final displayName = isMe ? currentUser.name : message.user;
@@ -1683,7 +1924,14 @@ class _MessageBubble extends ConsumerWidget {
           child: ClipRRect(
             borderRadius: BorderRadius.circular(12),
             child: message.filePath != null
-                ? Image.file(
+                ? _isNetworkPath(message.filePath!)
+                    ? Image.network(
+                        message.filePath!,
+                        width: 200,
+                        height: 200,
+                        fit: BoxFit.cover,
+                      )
+                    : Image.file(
                     File(message.filePath!),
                     width: 200,
                     height: 200,
@@ -1769,10 +2017,15 @@ class _MessageBubble extends ConsumerWidget {
 
   void _openFile(String? path) async {
     if (path == null) return;
+    if (_isNetworkPath(path)) return;
     final result = await OpenFilex.open(path);
     if (result.type != ResultType.done) {
       debugPrint('Error opening file: ${result.message}');
     }
+  }
+
+  bool _isNetworkPath(String path) {
+    return path.startsWith('http://') || path.startsWith('https://');
   }
 
   IconData _getIconForType(MessageType type) {

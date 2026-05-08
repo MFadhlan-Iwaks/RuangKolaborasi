@@ -32,9 +32,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     super.dispose();
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     final result = _isRegisterMode
-        ? ref
+        ? await ref
               .read(authProvider.notifier)
               .register(
                 name: _nameController.text,
@@ -42,18 +42,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 password: _passwordController.text,
                 confirmPassword: _confirmPasswordController.text,
               )
-        : ref
+        : await ref
               .read(authProvider.notifier)
               .login(
                 email: _emailController.text,
                 password: _passwordController.text,
               );
 
+    if (!mounted) return;
     _handleAuthResult(result);
   }
 
-  void _handleGoogleLogin() {
-    final result = ref.read(authProvider.notifier).signInWithGoogle();
+  Future<void> _handleGoogleLogin() async {
+    final result = await ref.read(authProvider.notifier).signInWithGoogle();
+    if (!mounted) return;
     _handleAuthResult(result);
   }
 
@@ -84,6 +86,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final authState = ref.watch(authProvider);
 
     return Scaffold(
       backgroundColor: isDark ? AppTheme.zinc950_bg : Colors.white,
@@ -194,7 +197,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     width: double.infinity,
                     height: 50,
                     child: ElevatedButton(
-                      onPressed: _submit,
+                      onPressed: authState.isLoading ? null : _submit,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.indigo600,
                         foregroundColor: Colors.white,
@@ -203,10 +206,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         ),
                         elevation: 0,
                       ),
-                      child: Text(
-                        _isRegisterMode ? 'Daftar' : 'Masuk',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
+                      child: authState.isLoading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : Text(
+                              _isRegisterMode ? 'Daftar' : 'Masuk',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -216,7 +230,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     width: double.infinity,
                     height: 50,
                     child: OutlinedButton(
-                      onPressed: _handleGoogleLogin,
+                      onPressed: authState.isLoading
+                          ? null
+                          : _handleGoogleLogin,
                       style: OutlinedButton.styleFrom(
                         side: BorderSide(
                           color: isDark
