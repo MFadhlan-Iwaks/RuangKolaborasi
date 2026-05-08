@@ -3,8 +3,49 @@
 
 import { useState } from 'react';
 import { Message } from '@/types';
+import { apiFetch } from '@/lib/apiClient';
+import { getSupabaseBrowserClient } from '@/lib/supabaseClient';
 
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.NEXT_PUBLIC_GEMINI_API_KEY}`;
+interface SummarizeResponse {
+  summary: string;
+}
+
+interface PolishResponse {
+  polishedText: string;
+}
+
+function getSummaryContent(message: Message) {
+  if (message.deletedForEveryone) return '[Pesan sudah dihapus]';
+
+  const parts = [
+    message.text?.trim(),
+    message.replyTo
+      ? `Membalas ${message.replyTo.user}: "${message.replyTo.preview}"`
+      : '',
+    message.fileName
+      ? `Lampiran: ${message.fileName}${message.fileSize ? ` (${message.fileSize})` : ''}`
+      : '',
+  ].filter(Boolean);
+
+  return parts.join('\n') || '[Pesan tanpa teks]';
+}
+
+async function getAccessToken() {
+  const supabase = getSupabaseBrowserClient();
+  const { data, error } = await supabase.auth.getSession();
+
+  if (error) {
+    throw error;
+  }
+
+  const token = data.session?.access_token;
+
+  if (!token) {
+    throw new Error('Silakan login terlebih dahulu untuk memakai fitur AI.');
+  }
+
+  return token;
+}
 
 export function useGemini() {
   const [isSummarizing, setIsSummarizing] = useState(false);
@@ -13,45 +54,41 @@ export function useGemini() {
 
   const summarize = async (messages: Message[]) => {
     if (messages.length === 0) return;
+    const readableMessages = messages
+      .filter((message) => !message.deletedForEveryone)
+      .slice(-100)
+      .map((message) => ({
+        senderName: message.user.replace(' (Kamu)', ''),
+        content: `[${message.time}] ${getSummaryContent(message)}`,
+        type: message.type,
+      }));
+
+    if (readableMessages.length === 0) {
+      setSummaryResult('Belum ada pesan yang bisa dirangkum.');
+      return;
+    }
+
     setIsSummarizing(true);
     setSummaryResult('');
 
     try {
-      const chatLog = messages
-        .map((m) => `${m.user}: ${m.text ?? `(Mengirim file: ${m.fileName})`}`)
-        .join('\n');
-
-      const response = await fetch(GEMINI_URL, {
+      const accessToken = await getAccessToken();
+      const data = await apiFetch<SummarizeResponse>('/api/ai/summarize', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        accessToken,
         body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                {
-                  text: `Berikut adalah log obrolan dari ruang kerja kolaborasi kelompok mahasiswa:\n\n${chatLog}\n\nBuatkan ringkasan singkat dalam bahasa Indonesia mengenai poin-poin penting yang dibahas, dan berikan daftar tugas (action items) jika ada.`,
-                },
-              ],
-            },
-          ],
-          systemInstruction: {
-            parts: [
-              {
-                text: 'Kamu adalah asisten AI yang cerdas dan membantu merangkum diskusi teknis kelompok.',
-              },
-            ],
-          },
+          messages: readableMessages,
         }),
       });
 
-      const data = await response.json();
-      const text =
-        data.candidates?.[0]?.content?.parts?.[0]?.text ??
-        'Gagal membuat rangkuman.';
-      setSummaryResult(text);
+      setSummaryResult(data.summary);
     } catch (error) {
       console.error('Gagal merangkum:', error);
-      setSummaryResult('Terjadi kesalahan saat menghubungi Gemini API.');
+      setSummaryResult(
+        error instanceof Error
+          ? error.message
+          : 'Terjadi kesalahan saat menghubungi backend AI.'
+      );
     } finally {
       setIsSummarizing(false);
     }
@@ -60,25 +97,16 @@ export function useGemini() {
   const polishText = async (text: string): Promise<string | null> => {
     setIsPolishing(true);
     try {
-      const response = await fetch(GEMINI_URL, {
+      const accessToken = await getAccessToken();
+      const data = await apiFetch<PolishResponse>('/api/ai/polish-message', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        accessToken,
         body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                {
-                  text: `Perbaiki kalimat berikut menjadi lebih profesional dan jelas untuk dikirim ke grup kerja perkuliahan (bahasa Indonesia). Kembalikan teks hasil perbaikan saja tanpa penjelasan:\n\n"${text}"`,
-                },
-              ],
-            },
-          ],
+          text,
         }),
       });
 
-      const data = await response.json();
-      const result = data.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
-      return result ? result.replace(/^["']|["']$/g, '').trim() : null;
+      return data.polishedText ? data.polishedText.replace(/^["']|["']$/g, '').trim() : null;
     } catch (error) {
       console.error('Gagal memoles teks:', error);
       return null;

@@ -1,17 +1,55 @@
 // src/app/(auth)/login/page.tsx
+'use client';
+
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useState, type FormEvent } from 'react';
+import AuthThemeToggle from '@/components/auth/AuthThemeToggle';
+import { getSupabaseBrowserClient } from '@/lib/supabaseClient';
 
 export default function LoginPage() {
+  const router = useRouter();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setErrorMessage('');
+    setIsSubmitting(true);
+
+    const formData = new FormData(event.currentTarget);
+    const email = String(formData.get('email') || '').trim();
+    const password = String(formData.get('password') || '');
+
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        setErrorMessage(error.message);
+        return;
+      }
+
+      router.push('/workspace');
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Gagal masuk. Coba lagi.'
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   return (
-    <div className="flex h-screen">
+    <div className="flex min-h-screen">
+      <AuthThemeToggle />
 
       {/* KIRI — Branded Panel */}
       <div className="hidden lg:flex w-[45%] bg-indigo-950 flex-col justify-between p-10 relative overflow-hidden">
         
-        {/* Background dekoratif */}
-        <div className="absolute w-72 h-72 rounded-full bg-white/[0.03] -top-16 -right-16" />
-        <div className="absolute w-52 h-52 rounded-full bg-white/[0.03] -bottom-12 -left-12" />
-
         {/* Logo */}
         <div className="flex items-center gap-3 relative z-10">
           <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center">
@@ -60,7 +98,7 @@ export default function LoginPage() {
       </div>
 
       {/* KANAN — Form Login */}
-      <div className="flex-1 flex flex-col justify-center px-8 sm:px-12 lg:px-16 bg-white">
+      <div className="flex-1 flex flex-col justify-center overflow-y-auto px-8 py-10 sm:px-12 lg:px-16 bg-white">
         <div className="w-full max-w-sm mx-auto space-y-6">
 
           {/* Heading */}
@@ -74,14 +112,16 @@ export default function LoginPage() {
           </div>
 
           {/* Form */}
-          <form className="space-y-4">
+          <form className="space-y-4" onSubmit={handleSubmit}>
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-gray-600">
                 Email
               </label>
               <input
+                name="email"
                 type="email"
                 placeholder="nama@email.com"
+                required
                 className="w-full h-10 px-3 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition-all"
               />
             </div>
@@ -99,17 +139,26 @@ export default function LoginPage() {
                 </Link>
               </div>
               <input
+                name="password"
                 type="password"
                 placeholder="••••••••"
+                required
                 className="w-full h-10 px-3 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition-all"
               />
             </div>
 
+            {errorMessage && (
+              <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-600">
+                {errorMessage}
+              </p>
+            )}
+
             <button
               type="submit"
+              disabled={isSubmitting}
               className="w-full h-10 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors"
             >
-              Masuk
+              {isSubmitting ? 'Memproses...' : 'Masuk'}
             </button>
           </form>
 

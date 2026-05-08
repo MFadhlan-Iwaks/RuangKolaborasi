@@ -2,48 +2,155 @@
 'use client';
 
 import { useState } from 'react';
-import { MessageSquare, Folder, ChevronDown } from 'lucide-react';
-import { Room, Status } from '@/types';
+import { Archive, Folder, MessageSquare, Plus, RotateCcw, Star, Trash2 } from 'lucide-react';
+import { Room, Status, TeamMember } from '@/types';
 import StatusMenu from '@/components/ui/StatusMenu';
 
-const ROOMS: Room[] = [
-  { id: 'diskusi-utama', name: 'Diskusi Utama', icon: 'message' },
-  { id: 'pengembangan-api', name: 'Pengembangan API', icon: 'folder' },
-  { id: 'ui-ux-design', name: 'UI/UX Design', icon: 'folder' },
-];
-
-const DM_LIST = [
-  { name: 'Rezza', avatar: 'bg-blue-500' },
-  { name: 'Sammi Zaki', avatar: 'bg-emerald-500' },
-  { name: 'Gibran', avatar: 'bg-amber-500' },
-];
-
 interface SidebarProps {
-  activeRoom: string;
-  onRoomChange: (roomName: string) => void;
+  workspaceName: string;
+  workspaceInitials: string;
+  workspaceColor: string;
+  workspacePhotoUrl?: string;
+  currentUserName: string;
+  currentUserInitial: string;
+  currentUserPhotoUrl?: string;
+  currentUserStatus: Status;
+  memberCount: number;
+  members: TeamMember[];
+  rooms: Room[];
+  activeRoomId: string;
+  canManageChannels: boolean;
+  onRoomChange: (roomId: string) => void;
+  onCreateChannel: () => void;
+  onDeleteChannel: () => void;
+  onToggleFavoriteChannel: (roomId: string) => void;
+  onRestoreChannel: (roomId: string) => void;
+  onStatusChange: (status: Status) => void;
 }
 
-export default function Sidebar({ activeRoom, onRoomChange }: SidebarProps) {
+export default function Sidebar({
+  workspaceName,
+  workspaceInitials,
+  workspaceColor,
+  workspacePhotoUrl,
+  currentUserName,
+  currentUserInitial,
+  currentUserPhotoUrl,
+  currentUserStatus,
+  memberCount,
+  members,
+  rooms,
+  activeRoomId,
+  canManageChannels,
+  onRoomChange,
+  onCreateChannel,
+  onDeleteChannel,
+  onToggleFavoriteChannel,
+  onRestoreChannel,
+  onStatusChange,
+}: SidebarProps) {
   const [showStatusMenu, setShowStatusMenu] = useState(false);
-  const [status, setStatus] = useState<Status>('online');
+  const favoriteRooms = rooms.filter((room) => room.favorite && !room.archived);
+  const activeRooms = rooms.filter((room) => !room.archived);
+  const archivedRooms = rooms.filter((room) => room.archived);
+
+  function renderRoom(room: Room) {
+    const isActive = activeRoomId === room.id;
+    const Icon = room.icon === 'message' ? MessageSquare : Folder;
+
+    return (
+      <div key={room.id} className="group relative">
+        <button
+          onClick={() => onRoomChange(room.id)}
+          className={`w-full flex items-center space-x-3 px-2 py-2 rounded-md transition-colors ${
+            isActive
+              ? 'bg-blue-50 text-blue-700 font-medium'
+              : 'text-gray-600 hover:bg-gray-100'
+          }`}
+        >
+          {room.archived ? (
+            <Archive
+              size={18}
+              className={isActive ? 'text-blue-600' : 'text-gray-400'}
+            />
+          ) : (
+            <Icon
+              size={18}
+              className={isActive ? 'text-blue-600' : 'text-gray-400'}
+            />
+          )}
+          <span className="min-w-0 flex-1 truncate text-left text-sm">
+            {room.name}
+          </span>
+          {!!room.unread && (
+            <span className="min-w-5 rounded-full bg-blue-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+              {room.unread}
+            </span>
+          )}
+        </button>
+        {canManageChannels && room.archived ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRestoreChannel(room.id);
+            }}
+            title="Pulihkan channel"
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-gray-400 opacity-0 transition-opacity hover:bg-blue-50 hover:text-blue-600 group-hover:opacity-100"
+          >
+            <RotateCcw size={13} />
+          </button>
+        ) : canManageChannels ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleFavoriteChannel(room.id);
+            }}
+            title={room.favorite ? 'Hapus dari favorit' : 'Tambah ke favorit'}
+            className={`absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 transition-opacity ${
+              room.favorite
+                ? 'text-amber-500 opacity-100'
+                : 'text-gray-400 opacity-0 group-hover:opacity-100'
+            } hover:bg-amber-50 hover:text-amber-500`}
+          >
+            <Star size={13} fill={room.favorite ? 'currentColor' : 'none'} />
+          </button>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <div className="w-64 bg-white border-r border-gray-200 flex flex-col shrink-0">
 
       {/* Header Workspace */}
-      <div className="h-16 px-4 flex items-center justify-between border-b border-gray-200 hover:bg-gray-50 cursor-pointer transition-colors">
+      <div className="h-16 px-4 flex items-center justify-between border-b border-gray-200">
         <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 bg-blue-600 text-white rounded-lg flex items-center justify-center font-bold text-sm shadow-sm">
-            TB
-          </div>
-          <div>
-            <h1 className="font-bold text-sm text-gray-900 leading-tight">
-              Tugas Besar PABP
+          {workspacePhotoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={workspacePhotoUrl}
+              alt={workspaceName}
+              className="h-8 w-8 shrink-0 rounded-lg object-cover shadow-sm"
+            />
+          ) : (
+            <div className={`w-8 h-8 ${workspaceColor} text-white rounded-lg flex items-center justify-center font-bold text-sm shadow-sm`}>
+              {workspaceInitials}
+            </div>
+          )}
+          <div className="min-w-0 flex-1">
+            <h1
+              title={workspaceName}
+              className="truncate font-bold text-sm text-gray-900 leading-tight"
+            >
+              {workspaceName}
             </h1>
-            <p className="text-xs text-gray-500 font-medium">Tim 4 Orang</p>
+            <p className="text-xs text-gray-500 font-medium">
+              {memberCount} anggota
+            </p>
           </div>
         </div>
-        <ChevronDown size={16} className="text-gray-400" />
       </div>
 
       {/* Navigasi */}
@@ -51,55 +158,112 @@ export default function Sidebar({ activeRoom, onRoomChange }: SidebarProps) {
 
         {/* Ruang Diskusi */}
         <div>
+          {favoriteRooms.length > 0 && (
+            <div className="mb-5">
+              <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 px-2">
+                Favorit
+              </h2>
+              <div className="space-y-0.5">
+                {favoriteRooms.map((room) => renderRoom(room))}
+              </div>
+            </div>
+          )}
+
           <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 px-2 flex justify-between items-center">
             Ruang Diskusi
-            <span className="cursor-pointer hover:text-blue-600">+</span>
+            {canManageChannels && (
+            <span className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={onCreateChannel}
+                title="Buat channel baru"
+                className="rounded-md p-1 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
+              >
+                <Plus size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={onDeleteChannel}
+                title="Hapus ruang diskusi aktif"
+                className="rounded-md p-1 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
+              >
+                <Trash2 size={14} />
+              </button>
+            </span>
+            )}
           </h2>
           <div className="space-y-0.5">
-            {ROOMS.map((room) => {
-              const isActive = activeRoom === room.name;
-              const Icon = room.icon === 'message' ? MessageSquare : Folder;
-              return (
-                <button
-                  key={room.id}
-                  onClick={() => onRoomChange(room.name)}
-                  className={`w-full flex items-center space-x-3 px-2 py-2 rounded-md transition-colors ${
-                    isActive
-                      ? 'bg-blue-50 text-blue-700 font-medium'
-                      : 'text-gray-600 hover:bg-gray-100'
-                  }`}
-                >
-                  <Icon
-                    size={18}
-                    className={isActive ? 'text-blue-600' : 'text-gray-400'}
-                  />
-                  <span className="text-sm">{room.name}</span>
-                </button>
-              );
-            })}
+            {activeRooms.map((room) => renderRoom(room))}
+            {activeRooms.length === 0 && (
+              <p className="px-2 py-2 text-xs leading-5 text-gray-400">
+                Semua ruang diarsipkan.
+              </p>
+            )}
           </div>
         </div>
 
-        {/* Pesan Langsung */}
+        {archivedRooms.length > 0 && (
+          <div>
+            <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 px-2">
+              Arsip
+            </h2>
+            <div className="space-y-0.5">
+              {archivedRooms.map((room) => renderRoom(room))}
+            </div>
+          </div>
+        )}
+
+        {/* Anggota Online */}
         <div>
           <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 px-2">
-            Pesan Langsung
+            Anggota Online
           </h2>
           <div className="space-y-0.5">
-            {DM_LIST.map((dm) => (
-              <button
-                key={dm.name}
-                className="w-full flex items-center space-x-3 px-2 py-2 rounded-md text-gray-600 hover:bg-gray-100 transition-colors"
+            {members
+              .filter((member) => member.status === 'active')
+              .map((member) => {
+                const memberStatus = member.profileStatus || 'online';
+                const memberBio = member.bio || 'Siap diskusi di ruang kerja.';
+
+                return (
+              <div
+                key={member.id}
+                className="w-full flex items-center space-x-3 px-2 py-2 rounded-md text-gray-600"
               >
                 <div className="relative">
-                  <div className={`w-6 h-6 rounded-full text-white text-[10px] font-bold flex items-center justify-center ${dm.avatar}`}>
-                    {dm.name.charAt(0)}
-                  </div>
-                  <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border-2 border-white rounded-full" />
+                  {member.photoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={member.photoUrl}
+                      alt={member.name}
+                      className="h-6 w-6 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className={`w-6 h-6 rounded-full text-white text-[10px] font-bold flex items-center justify-center ${member.avatar}`}>
+                      {member.name.charAt(0)}
+                    </div>
+                  )}
+                  <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 ${
+                    memberStatus === 'online'
+                      ? 'bg-green-500'
+                      : memberStatus === 'idle'
+                        ? 'bg-amber-500'
+                        : memberStatus === 'dnd'
+                          ? 'bg-red-500'
+                          : 'bg-gray-400'
+                  } border-2 border-white rounded-full`} />
                 </div>
-                <span className="text-sm">{dm.name}</span>
-              </button>
-            ))}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-gray-700">
+                    {member.name}
+                  </p>
+                  <p className="truncate text-xs text-gray-400">
+                    {memberBio}
+                  </p>
+                </div>
+              </div>
+                );
+              })}
           </div>
         </div>
 
@@ -108,10 +272,13 @@ export default function Sidebar({ activeRoom, onRoomChange }: SidebarProps) {
       {/* User Info + Status */}
       <div className="p-4 border-t border-gray-200 relative">
         <StatusMenu
-          status={status}
-          onStatusChange={setStatus}
+          status={currentUserStatus}
+          onStatusChange={onStatusChange}
           show={showStatusMenu}
           onToggle={() => setShowStatusMenu(!showStatusMenu)}
+          userName={currentUserName}
+          userInitial={currentUserInitial}
+          userPhotoUrl={currentUserPhotoUrl}
         />
       </div>
 
