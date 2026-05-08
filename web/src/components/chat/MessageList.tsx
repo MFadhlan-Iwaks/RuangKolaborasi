@@ -55,9 +55,10 @@ function computeGrouping(messages: Message[]): Message[] {
     let isGroupStart = true;
 
     if (prevMessage) {
-      // Extract sender name for comparison (handle case sensitivity)
-      const currentSender = message.user.split(' (Kamu)')[0];
-      const prevSender = prevMessage.user.split(' (Kamu)')[0];
+      const currentSender =
+        message.senderId || message.user.replace(/\s+\(Kamu\)$/, '');
+      const prevSender =
+        prevMessage.senderId || prevMessage.user.replace(/\s+\(Kamu\)$/, '');
 
       if (currentSender === prevSender) {
         // try parsing times and check threshold

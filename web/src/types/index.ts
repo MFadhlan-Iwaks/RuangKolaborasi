@@ -27,6 +27,7 @@ export interface CurrentUser {
 
 export interface Message {
   id: number | string;
+  senderId?: string;
   user: string;
   avatar: string;
   time: string;

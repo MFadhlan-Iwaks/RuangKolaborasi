@@ -305,13 +305,31 @@ export default function WorkspacePage() {
             return;
           }
 
-          // Lookup sender name from membersByWorkspace to fix realtime missing sender_name
           const senderMember = membersByWorkspace[activeWorkspaceId]?.find(
             (member) => member.id === row.sender_id
           );
+          let senderName = row.sender_name || senderMember?.name;
+
+          if (!senderName && row.sender_id !== currentUser.id) {
+            const { data: profile, error } = await supabase
+              .from('profiles')
+              .select('full_name, username')
+              .eq('id', row.sender_id)
+              .maybeSingle();
+
+            if (error) {
+              console.error('Gagal memuat nama pengirim realtime:', getReadableError(error), error);
+            } else {
+              senderName = getDisplayName({
+                fullName: profile?.full_name,
+                username: profile?.username,
+              });
+            }
+          }
+
           const rowWithSenderName: BootstrapMessageRow = {
             ...row,
-            sender_name: row.sender_name || senderMember?.full_name || 'Anggota',
+            sender_name: senderName || 'Anggota',
           };
 
           const nextMessage = toMessage(rowWithSenderName, currentUser);
@@ -740,6 +758,7 @@ export default function WorkspacePage() {
       : undefined;
     const pendingMessage: Message = {
       id: tempMessageId,
+      senderId: currentUserId,
       user: currentUserName,
       avatar: currentUserAvatar,
       time: 'Mengirim...',

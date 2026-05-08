@@ -192,6 +192,7 @@ export function toMessage(
 
   return {
     id: row.id,
+    senderId: row.sender_id,
     user: isMine ? `${currentUser.name} (Kamu)` : row.sender_name || 'Anggota',
     avatar: isMine ? currentUser.avatar : 'bg-slate-500',
     isMine,
