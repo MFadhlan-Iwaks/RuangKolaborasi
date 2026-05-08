@@ -30,6 +30,7 @@ interface WorkspaceHeaderProps {
   showFilePanel: boolean;
   isSummarizing: boolean;
   canSummarize: boolean;
+  canManageWorkspace: boolean;
   onSearchChange: (query: string) => void;
   onInvite: () => void;
   onSummarize: () => void;
@@ -57,6 +58,7 @@ export default function WorkspaceHeader({
   showFilePanel,
   isSummarizing,
   canSummarize,
+  canManageWorkspace,
   onSearchChange,
   onInvite,
   onSummarize,
@@ -126,13 +128,15 @@ export default function WorkspaceHeader({
       </div>
 
       <div ref={actionsRef} className="flex shrink-0 items-center space-x-2 lg:space-x-3">
-        <button
-          onClick={onInvite}
-          className="hidden items-center space-x-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 lg:flex"
-        >
-          <UserPlus size={16} />
-          <span>Invite</span>
-        </button>
+        {canManageWorkspace && (
+          <button
+            onClick={onInvite}
+            className="hidden items-center space-x-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 lg:flex"
+          >
+            <UserPlus size={16} />
+            <span>Invite</span>
+          </button>
+        )}
         <button
           onClick={onSummarize}
           disabled={isSummarizing || !canSummarize}
@@ -156,14 +160,16 @@ export default function WorkspaceHeader({
           <Files size={16} />
           <span>File</span>
         </button>
-        <button
-          onClick={onOpenChannelSettings}
-          disabled={!activeRoom}
-          className="hidden items-center space-x-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 lg:flex"
-        >
-          <SlidersHorizontal size={16} />
-          <span>Channel</span>
-        </button>
+        {canManageWorkspace && (
+          <button
+            onClick={onOpenChannelSettings}
+            disabled={!activeRoom}
+            className="hidden items-center space-x-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 lg:flex"
+          >
+            <SlidersHorizontal size={16} />
+            <span>Channel</span>
+          </button>
+        )}
         <div className="relative hidden xl:block">
           <Search
             size={16}

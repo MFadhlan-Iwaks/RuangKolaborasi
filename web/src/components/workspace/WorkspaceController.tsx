@@ -137,6 +137,9 @@ export default function WorkspacePage() {
     searchQuery,
     currentUserName,
   });
+  const currentWorkspaceRole = members.find((member) => member.id === currentUserId)?.role;
+  const canManageWorkspace =
+    currentWorkspaceRole === 'Owner' || currentWorkspaceRole === 'Admin';
 
   function showToast(toast: Omit<ToastMessage, 'id'>) {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -1670,6 +1673,7 @@ export default function WorkspacePage() {
         members={members}
         rooms={rooms}
         activeRoomId={activeRoomId}
+        canManageChannels={canManageWorkspace}
         onRoomChange={(roomId) => {
           setActiveRoomId(roomId);
           setDraftFile(null);
@@ -1708,6 +1712,7 @@ export default function WorkspacePage() {
           showFilePanel={showFilePanel}
           isSummarizing={isSummarizing}
           canSummarize={messages.length > 0}
+          canManageWorkspace={canManageWorkspace}
           onSearchChange={setSearchQuery}
           onInvite={() => {
             setInviteMessage('');
@@ -1741,6 +1746,7 @@ export default function WorkspacePage() {
           selectedFileMessage={selectedFileMessage}
           isDragging={isDragging}
           isSending={!!busyActions.sendMessage}
+          canManageChannels={canManageWorkspace}
           dragHandlers={dragHandlers}
           onClearSearch={() => {
             setSearchQuery('');
@@ -1795,6 +1801,7 @@ export default function WorkspacePage() {
           currentUserPhotoUrl={currentUserPhotoUrl}
           currentUserBio={currentUserBio}
           currentUserStatus={currentUserStatus}
+          canManageWorkspace={canManageWorkspace}
           busyActions={busyActions}
           onCloseWorkspaceSettings={() => setShowWorkspaceSettings(false)}
           onUpdateWorkspace={handleUpdateWorkspace}

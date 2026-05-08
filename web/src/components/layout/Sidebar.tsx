@@ -18,6 +18,7 @@ interface SidebarProps {
   members: TeamMember[];
   rooms: Room[];
   activeRoomId: string;
+  canManageChannels: boolean;
   onRoomChange: (roomId: string) => void;
   onCreateChannel: () => void;
   onDeleteChannel: () => void;
@@ -38,6 +39,7 @@ export default function Sidebar({
   members,
   rooms,
   activeRoomId,
+  canManageChannels,
   onRoomChange,
   onCreateChannel,
   onDeleteChannel,
@@ -84,7 +86,7 @@ export default function Sidebar({
             </span>
           )}
         </button>
-        {room.archived ? (
+        {canManageChannels && room.archived ? (
           <button
             type="button"
             onClick={(e) => {
@@ -96,7 +98,7 @@ export default function Sidebar({
           >
             <RotateCcw size={13} />
           </button>
-        ) : (
+        ) : canManageChannels ? (
           <button
             type="button"
             onClick={(e) => {
@@ -112,7 +114,7 @@ export default function Sidebar({
           >
             <Star size={13} fill={room.favorite ? 'currentColor' : 'none'} />
           </button>
-        )}
+        ) : null}
       </div>
     );
   }
@@ -158,6 +160,7 @@ export default function Sidebar({
 
           <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 px-2 flex justify-between items-center">
             Ruang Diskusi
+            {canManageChannels && (
             <span className="flex items-center gap-1">
               <button
                 type="button"
@@ -176,6 +179,7 @@ export default function Sidebar({
                 <Trash2 size={14} />
               </button>
             </span>
+            )}
           </h2>
           <div className="space-y-0.5">
             {activeRooms.map((room) => renderRoom(room))}

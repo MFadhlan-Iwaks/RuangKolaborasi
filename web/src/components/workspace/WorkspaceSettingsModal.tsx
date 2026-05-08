@@ -29,6 +29,7 @@ interface WorkspaceSettingsModalProps {
   workspace: Workspace;
   members: TeamMember[];
   canLeave: boolean;
+  canManageWorkspace: boolean;
   isSaving?: boolean;
   isLeaving?: boolean;
   onClose: () => void;
@@ -40,6 +41,7 @@ export default function WorkspaceSettingsModal({
   workspace,
   members,
   canLeave,
+  canManageWorkspace,
   isSaving = false,
   isLeaving = false,
   onClose,
@@ -62,7 +64,7 @@ export default function WorkspaceSettingsModal({
 
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!name.trim() || !shortName.trim() || isSaving) return;
+    if (!canManageWorkspace || !name.trim() || !shortName.trim() || isSaving) return;
 
     onUpdate({
       name: name.trim(),
@@ -94,7 +96,9 @@ export default function WorkspaceSettingsModal({
                 Pengaturan Grup
               </h3>
               <p className="truncate text-xs text-gray-500">
-                Kelola identitas, anggota, dan akses workspace.
+                {canManageWorkspace
+                  ? 'Kelola identitas, anggota, dan akses workspace.'
+                  : 'Lihat anggota, kode invite, dan akses workspace.'}
               </p>
             </div>
           </div>
@@ -145,7 +149,7 @@ export default function WorkspaceSettingsModal({
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  disabled={isSaving}
+                  disabled={!canManageWorkspace || isSaving}
                   className="h-10 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-900 outline-none transition-all focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-50 disabled:cursor-not-allowed disabled:opacity-70"
                 />
               </label>
@@ -159,7 +163,7 @@ export default function WorkspaceSettingsModal({
                     value={shortName}
                     onChange={(e) => setShortName(e.target.value.toUpperCase())}
                     maxLength={3}
-                    disabled={isSaving}
+                    disabled={!canManageWorkspace || isSaving}
                     className="h-10 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm font-bold uppercase tracking-wide text-gray-900 outline-none transition-all focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-50 disabled:cursor-not-allowed disabled:opacity-70"
                   />
                 </label>
@@ -175,7 +179,7 @@ export default function WorkspaceSettingsModal({
                     value={description}
                     maxLength={descriptionLimit}
                     rows={2}
-                    disabled={isSaving}
+                    disabled={!canManageWorkspace || isSaving}
                     onChange={(e) => setDescription(e.target.value)}
                     className="w-full resize-none rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none transition-all focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-50 disabled:cursor-not-allowed disabled:opacity-70"
                   />
@@ -193,7 +197,7 @@ export default function WorkspaceSettingsModal({
                       key={option}
                       type="button"
                       onClick={() => setColor(option)}
-                      disabled={isSaving}
+                      disabled={!canManageWorkspace || isSaving}
                       className={`flex h-9 w-9 items-center justify-center rounded-lg text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-60 ${option}`}
                     >
                       {color === option && <Check size={16} />}
@@ -211,14 +215,16 @@ export default function WorkspaceSettingsModal({
                 >
                   Batal
                 </button>
-                <button
-                  type="submit"
-                  disabled={isSaving || !name.trim() || !shortName.trim()}
-                  className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {isSaving && <Loader2 size={15} className="animate-spin" />}
-                  Simpan Perubahan
-                </button>
+                {canManageWorkspace && (
+                  <button
+                    type="submit"
+                    disabled={isSaving || !name.trim() || !shortName.trim()}
+                    className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isSaving && <Loader2 size={15} className="animate-spin" />}
+                    Simpan Perubahan
+                  </button>
+                )}
               </div>
             </form>
           )}
@@ -272,19 +278,25 @@ export default function WorkspaceSettingsModal({
                 <p className="text-xs font-bold uppercase tracking-wide text-gray-400">
                   Kode invite
                 </p>
-                <div className="mt-2 flex items-center gap-2">
-                  <code className="flex-1 rounded-lg bg-white px-3 py-2 text-sm font-bold tracking-wide text-gray-800">
-                    {workspace.inviteCode}
-                  </code>
-                  <button
-                    type="button"
-                    onClick={handleCopyInviteCode}
-                    className="inline-flex h-10 items-center gap-2 rounded-lg bg-blue-600 px-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
-                  >
-                    {copied ? <Check size={15} /> : <Copy size={15} />}
-                    {copied ? 'Copied' : 'Copy'}
-                  </button>
-                </div>
+                {canManageWorkspace && workspace.inviteCode ? (
+                  <div className="mt-2 flex items-center gap-2">
+                    <code className="flex-1 rounded-lg bg-white px-3 py-2 text-sm font-bold tracking-wide text-gray-800">
+                      {workspace.inviteCode}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={handleCopyInviteCode}
+                      className="inline-flex h-10 items-center gap-2 rounded-lg bg-blue-600 px-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
+                    >
+                      {copied ? <Check size={15} /> : <Copy size={15} />}
+                      {copied ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
+                ) : (
+                  <p className="mt-2 rounded-lg bg-white px-3 py-2 text-sm text-gray-500">
+                    Kode invite hanya dapat dilihat oleh owner atau admin.
+                  </p>
+                )}
               </div>
 
               <div className="rounded-xl border border-red-100 bg-red-50 p-4">

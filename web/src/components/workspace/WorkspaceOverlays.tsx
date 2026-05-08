@@ -39,6 +39,7 @@ interface WorkspaceOverlaysProps {
   currentUserPhotoUrl?: string;
   currentUserBio: string;
   currentUserStatus: Status;
+  canManageWorkspace: boolean;
   busyActions?: Record<string, boolean>;
   onCloseWorkspaceSettings: () => void;
   onUpdateWorkspace: (updates: Pick<Workspace, 'name' | 'shortName' | 'description' | 'color'>) => void;
@@ -95,6 +96,7 @@ export default function WorkspaceOverlays({
   currentUserPhotoUrl,
   currentUserBio,
   currentUserStatus,
+  canManageWorkspace,
   busyActions = {},
   onCloseWorkspaceSettings,
   onUpdateWorkspace,
@@ -130,6 +132,7 @@ export default function WorkspaceOverlays({
           workspace={activeWorkspace}
           members={members}
           canLeave={true}
+          canManageWorkspace={canManageWorkspace}
           isSaving={!!busyActions.updateWorkspace}
           isLeaving={!!busyActions.leaveWorkspace}
           onClose={onCloseWorkspaceSettings}
@@ -151,7 +154,7 @@ export default function WorkspaceOverlays({
         />
       )}
 
-      {showChannelSettings && activeRoom && (
+      {showChannelSettings && activeRoom && canManageWorkspace && (
         <ChannelSettingsModal
           room={activeRoom}
           messageCount={messages.length}
@@ -200,7 +203,7 @@ export default function WorkspaceOverlays({
         />
       )}
 
-      {showChannelModal && (
+      {showChannelModal && canManageWorkspace && (
         <CreateChannelModal
           workspaceName={activeWorkspace.name}
           onClose={onCloseChannelModal}
@@ -209,7 +212,7 @@ export default function WorkspaceOverlays({
         />
       )}
 
-      {showDeleteChannelModal && (
+      {showDeleteChannelModal && canManageWorkspace && (
         <DeleteChannelModal
           activeRoom={activeRoom}
           workspace={activeWorkspace}
@@ -219,7 +222,7 @@ export default function WorkspaceOverlays({
         />
       )}
 
-      {showInviteModal && (
+      {showInviteModal && canManageWorkspace && (
         <InviteMemberModal
           workspace={activeWorkspace}
           members={members}
