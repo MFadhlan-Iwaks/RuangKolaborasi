@@ -45,6 +45,7 @@ export interface Message {
   mimeType?: string;
   pinned?: boolean;
   edited?: boolean;
+  isGroupStart?: boolean;
   replyTo?: {
     user: string;
     preview: string;
