@@ -18,6 +18,7 @@ interface FilePanelProps {
   onClose: () => void;
   onPreview: (message: Message) => void;
   onDownload: (message: Message) => void;
+  onEmptyUpload?: () => void;
 }
 
 const FILE_FILTERS: Array<{ value: FileCategory; label: string }> = [
@@ -37,9 +38,17 @@ export default function FilePanel({
   onClose,
   onPreview,
   onDownload,
+  onEmptyUpload,
 }: FilePanelProps) {
   return (
-    <aside className="hidden w-80 shrink-0 flex-col border-l border-gray-200 bg-gray-50/80 xl:flex">
+    <>
+    <button
+      type="button"
+      aria-label="Tutup panel file"
+      onClick={onClose}
+      className="fixed inset-0 z-30 bg-gray-900/30 backdrop-blur-sm xl:hidden"
+    />
+    <aside className="fixed inset-y-0 right-0 z-40 flex w-full max-w-sm shrink-0 flex-col border-l border-gray-200 bg-gray-50/95 shadow-2xl xl:static xl:z-auto xl:w-80 xl:max-w-none xl:shadow-none">
       <div className="border-b border-gray-200 bg-white px-5 py-4">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -88,11 +97,31 @@ export default function FilePanel({
             <div className="mb-3 rounded-full bg-blue-50 p-3 text-blue-600">
               <Files size={22} />
             </div>
-            <p className="text-sm font-bold text-gray-900">Belum ada file</p>
-            <p className="mt-1 text-xs leading-5 text-gray-500">
-              File yang dikirim lewat drag & drop atau paperclip akan muncul di
-              panel ini.
+            <p className="text-sm font-bold text-gray-900">
+              {files.length > 0 ? 'Tidak ada file di filter ini' : 'Belum ada file'}
             </p>
+            <p className="mt-1 text-xs leading-5 text-gray-500">
+              {files.length > 0
+                ? 'Coba lihat semua file yang sudah dibagikan di channel ini.'
+                : 'File yang dikirim lewat drag & drop atau paperclip akan muncul di panel ini.'}
+            </p>
+            {files.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => onCategoryChange('all')}
+                className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-blue-700"
+              >
+                Lihat Semua File
+              </button>
+            ) : onEmptyUpload && (
+              <button
+                type="button"
+                onClick={onEmptyUpload}
+                className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-blue-700"
+              >
+                Siapkan Upload
+              </button>
+            )}
           </div>
         ) : (
           filteredFiles.map((fileMessage) => {
@@ -150,5 +179,6 @@ export default function FilePanel({
         )}
       </div>
     </aside>
+    </>
   );
 }

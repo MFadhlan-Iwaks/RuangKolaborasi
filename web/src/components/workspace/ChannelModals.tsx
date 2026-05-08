@@ -1,31 +1,34 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
-import { AlertTriangle, Hash, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Hash, Loader2, Trash2, X } from 'lucide-react';
 import { Room, Workspace } from '@/types';
 
 interface CreateChannelModalProps {
   workspaceName: string;
   onClose: () => void;
   onCreate: (name: string, description: string) => void;
+  isCreating?: boolean;
 }
 
 export function CreateChannelModal({
   workspaceName,
   onClose,
   onCreate,
+  isCreating = false,
 }: CreateChannelModalProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const descriptionLimit = 160;
 
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name.trim() || isCreating) return;
     onCreate(name.trim(), description.trim());
   }
 
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-gray-900/40 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 p-4 backdrop-blur-sm">
       <form
         onSubmit={handleSubmit}
         className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl"
@@ -67,9 +70,15 @@ export function CreateChannelModal({
           </label>
 
           <label className="block space-y-1.5">
-            <span className="text-xs font-semibold text-gray-600">Deskripsi</span>
+            <span className="flex items-center justify-between text-xs font-semibold text-gray-600">
+              <span>Deskripsi</span>
+              <span className="font-medium text-gray-400">
+                {description.length}/{descriptionLimit}
+              </span>
+            </span>
             <textarea
               value={description}
+              maxLength={descriptionLimit}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Channel ini dipakai untuk..."
               rows={3}
@@ -82,15 +91,17 @@ export function CreateChannelModal({
           <button
             type="button"
             onClick={onClose}
+            disabled={isCreating}
             className="rounded-lg px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100"
           >
             Batal
           </button>
           <button
             type="submit"
-            disabled={!name.trim()}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={isCreating || !name.trim()}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
+            {isCreating && <Loader2 size={15} className="animate-spin" />}
             Buat Channel
           </button>
         </div>
@@ -102,6 +113,7 @@ export function CreateChannelModal({
 interface DeleteChannelModalProps {
   activeRoom?: Room;
   workspace: Workspace;
+  isDeleting?: boolean;
   onClose: () => void;
   onConfirm: () => void;
 }
@@ -109,11 +121,12 @@ interface DeleteChannelModalProps {
 export function DeleteChannelModal({
   activeRoom,
   workspace,
+  isDeleting = false,
   onClose,
   onConfirm,
 }: DeleteChannelModalProps) {
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-gray-900/40 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 p-4 backdrop-blur-sm">
       <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
           <div className="flex items-center gap-2">
@@ -171,6 +184,7 @@ export function DeleteChannelModal({
           <button
             type="button"
             onClick={onClose}
+            disabled={isDeleting}
             className="rounded-lg px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100"
           >
             Batal
@@ -178,9 +192,10 @@ export function DeleteChannelModal({
           <button
             type="button"
             onClick={onConfirm}
-            disabled={!activeRoom}
-            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={isDeleting || !activeRoom}
+            className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
+            {isDeleting && <Loader2 size={15} className="animate-spin" />}
             Ya, Hapus
           </button>
         </div>

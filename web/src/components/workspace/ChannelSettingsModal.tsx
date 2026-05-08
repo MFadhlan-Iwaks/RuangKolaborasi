@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
-import { Archive, Hash, RotateCcw, Star, X } from 'lucide-react';
+import { Archive, Hash, Loader2, RotateCcw, Star, X } from 'lucide-react';
 import { Room } from '@/types';
 
 interface ChannelSettingsModalProps {
@@ -11,6 +11,8 @@ interface ChannelSettingsModalProps {
   onClose: () => void;
   onUpdate: (updates: Pick<Room, 'name' | 'description' | 'favorite'>) => void;
   onArchiveToggle: () => void;
+  isSaving?: boolean;
+  isArchiving?: boolean;
 }
 
 export default function ChannelSettingsModal({
@@ -20,14 +22,17 @@ export default function ChannelSettingsModal({
   onClose,
   onUpdate,
   onArchiveToggle,
+  isSaving = false,
+  isArchiving = false,
 }: ChannelSettingsModalProps) {
   const [name, setName] = useState(room.name);
   const [description, setDescription] = useState(room.description ?? '');
   const [favorite, setFavorite] = useState(!!room.favorite);
+  const descriptionLimit = 160;
 
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name.trim() || isSaving) return;
 
     onUpdate({
       name: name.trim(),
@@ -37,7 +42,7 @@ export default function ChannelSettingsModal({
   }
 
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-gray-900/40 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 p-4 backdrop-blur-sm">
       <form
         onSubmit={handleSubmit}
         className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl"
@@ -95,9 +100,15 @@ export default function ChannelSettingsModal({
           </label>
 
           <label className="block space-y-1.5">
-            <span className="text-xs font-semibold text-gray-600">Deskripsi</span>
+            <span className="flex items-center justify-between text-xs font-semibold text-gray-600">
+              <span>Deskripsi</span>
+              <span className="font-medium text-gray-400">
+                {description.length}/{descriptionLimit}
+              </span>
+            </span>
             <textarea
               value={description}
+              maxLength={descriptionLimit}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
               placeholder="Channel ini dipakai untuk..."
@@ -135,13 +146,20 @@ export default function ChannelSettingsModal({
             <button
               type="button"
               onClick={onArchiveToggle}
+              disabled={isArchiving || isSaving}
               className={`mt-3 inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-white transition-colors ${
                 room.archived
                   ? 'bg-blue-600 hover:bg-blue-700'
                   : 'bg-slate-700 hover:bg-slate-800'
-              }`}
+              } disabled:cursor-not-allowed disabled:opacity-50`}
             >
-              {room.archived ? <RotateCcw size={14} /> : <Archive size={14} />}
+              {isArchiving ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : room.archived ? (
+                <RotateCcw size={14} />
+              ) : (
+                <Archive size={14} />
+              )}
               {room.archived ? 'Pulihkan Channel' : 'Arsipkan Channel'}
             </button>
           </div>
@@ -151,15 +169,17 @@ export default function ChannelSettingsModal({
           <button
             type="button"
             onClick={onClose}
+            disabled={isSaving || isArchiving}
             className="rounded-lg px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100"
           >
             Batal
           </button>
           <button
             type="submit"
-            disabled={!name.trim()}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={isSaving || isArchiving || !name.trim()}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
+            {isSaving && <Loader2 size={15} className="animate-spin" />}
             Simpan Channel
           </button>
         </div>

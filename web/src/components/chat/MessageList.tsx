@@ -15,6 +15,14 @@ interface MessageListProps {
   onTogglePin: (messageId: Message['id']) => void;
   onEdit: (message: Message) => void;
   onDelete: (messageId: Message['id']) => void;
+  onRetry: (message: Message) => void;
+  onToggleReaction: (messageId: Message['id'], emoji: string) => void;
+  onPreviewFile: (message: Message) => void;
+  onDownloadFile: (message: Message) => void;
+  onCopyFileLink: (message: Message) => void;
+  emptyActionLabel?: string;
+  onEmptyAction?: () => void;
+  searchQuery?: string;
 }
 
 export default function MessageList({
@@ -26,6 +34,14 @@ export default function MessageList({
   onTogglePin,
   onEdit,
   onDelete,
+  onRetry,
+  onToggleReaction,
+  onPreviewFile,
+  onDownloadFile,
+  onCopyFileLink,
+  emptyActionLabel,
+  onEmptyAction,
+  searchQuery = '',
 }: MessageListProps) {
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -55,16 +71,31 @@ export default function MessageList({
           <p className="mt-1 max-w-sm text-xs leading-5 text-gray-500">
             {emptyDescription}
           </p>
+          {emptyActionLabel && onEmptyAction && (
+            <button
+              type="button"
+              onClick={onEmptyAction}
+              className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-blue-700"
+            >
+              {emptyActionLabel}
+            </button>
+          )}
         </div>
       ) : (
         messages.map((msg) => (
           <MessageBubble
             key={msg.id}
             message={msg}
+            searchQuery={searchQuery}
             onReply={onReply}
             onTogglePin={onTogglePin}
             onEdit={onEdit}
             onDelete={onDelete}
+            onRetry={onRetry}
+            onToggleReaction={onToggleReaction}
+            onPreviewFile={onPreviewFile}
+            onDownloadFile={onDownloadFile}
+            onCopyFileLink={onCopyFileLink}
           />
         ))
       )}

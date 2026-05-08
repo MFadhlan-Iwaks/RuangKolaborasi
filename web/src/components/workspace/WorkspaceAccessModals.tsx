@@ -1,28 +1,31 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
-import { Building2, LogIn, X } from 'lucide-react';
+import { Building2, Loader2, LogIn, X } from 'lucide-react';
 
 interface CreateWorkspaceModalProps {
   onClose: () => void;
   onCreate: (name: string, description: string) => void;
+  isCreating?: boolean;
 }
 
 export function CreateWorkspaceModal({
   onClose,
   onCreate,
+  isCreating = false,
 }: CreateWorkspaceModalProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const descriptionLimit = 160;
 
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name.trim() || isCreating) return;
     onCreate(name.trim(), description.trim());
   }
 
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-gray-900/40 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 p-4 backdrop-blur-sm">
       <form
         onSubmit={handleSubmit}
         className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl"
@@ -62,9 +65,15 @@ export function CreateWorkspaceModal({
           </label>
 
           <label className="block space-y-1.5">
-            <span className="text-xs font-semibold text-gray-600">Deskripsi</span>
+            <span className="flex items-center justify-between text-xs font-semibold text-gray-600">
+              <span>Deskripsi</span>
+              <span className="font-medium text-gray-400">
+                {description.length}/{descriptionLimit}
+              </span>
+            </span>
             <textarea
               value={description}
+              maxLength={descriptionLimit}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Grup ini dipakai untuk..."
               rows={3}
@@ -77,15 +86,17 @@ export function CreateWorkspaceModal({
           <button
             type="button"
             onClick={onClose}
+            disabled={isCreating}
             className="rounded-lg px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100"
           >
             Batal
           </button>
           <button
             type="submit"
-            disabled={!name.trim()}
-            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={isCreating || !name.trim()}
+            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
+            {isCreating && <Loader2 size={15} className="animate-spin" />}
             Buat Grup
           </button>
         </div>
@@ -99,6 +110,7 @@ interface JoinWorkspaceModalProps {
   onClose: () => void;
   onJoin: (code: string) => void;
   onFeedbackClear: () => void;
+  isJoining?: boolean;
 }
 
 export function JoinWorkspaceModal({
@@ -106,16 +118,18 @@ export function JoinWorkspaceModal({
   onClose,
   onJoin,
   onFeedbackClear,
+  isJoining = false,
 }: JoinWorkspaceModalProps) {
   const [code, setCode] = useState('');
 
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (isJoining) return;
     onJoin(code);
   }
 
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-gray-900/40 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 p-4 backdrop-blur-sm">
       <form
         onSubmit={handleSubmit}
         className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl"
@@ -168,14 +182,17 @@ export function JoinWorkspaceModal({
           <button
             type="button"
             onClick={onClose}
+            disabled={isJoining}
             className="rounded-lg px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100"
           >
             Batal
           </button>
           <button
             type="submit"
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700"
+            disabled={isJoining || !code.trim()}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
+            {isJoining && <Loader2 size={15} className="animate-spin" />}
             Join Grup
           </button>
         </div>

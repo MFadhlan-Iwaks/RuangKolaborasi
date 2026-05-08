@@ -1,30 +1,32 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
-import { X } from 'lucide-react';
+import { Loader2, X } from 'lucide-react';
 import { Message } from '@/types';
 
 interface EditMessageModalProps {
   message: Message;
   onClose: () => void;
   onSave: (message: Message, text: string) => void;
+  isSaving?: boolean;
 }
 
 export default function EditMessageModal({
   message,
   onClose,
   onSave,
+  isSaving = false,
 }: EditMessageModalProps) {
   const [text, setText] = useState(message.text ?? '');
 
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (message.type === 'text' && !text.trim()) return;
+    if (isSaving || (message.type === 'text' && !text.trim())) return;
     onSave(message, text.trim());
   }
 
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-gray-900/40 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 p-4 backdrop-blur-sm">
       <form
         onSubmit={handleSubmit}
         className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl"
@@ -71,15 +73,17 @@ export default function EditMessageModal({
           <button
             type="button"
             onClick={onClose}
+            disabled={isSaving}
             className="rounded-lg px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100"
           >
             Batal
           </button>
           <button
             type="submit"
-            disabled={message.type === 'text' && !text.trim()}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={isSaving || (message.type === 'text' && !text.trim())}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
+            {isSaving && <Loader2 size={15} className="animate-spin" />}
             Simpan
           </button>
         </div>
