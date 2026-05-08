@@ -3,8 +3,9 @@
 export type Status = 'online' | 'idle' | 'dnd' | 'offline';
 
 export type MessageType = 'text' | 'file';
-export type MessageFilter = 'all' | 'files' | 'pinned';
+export type MessageFilter = 'all' | 'files' | 'pinned' | 'starred';
 export type FileCategory = 'all' | 'documents' | 'images' | 'code';
+export type ChatBackground = 'pattern' | 'clean' | 'focus' | 'warm';
 export type NotificationKind = 'message' | 'file' | 'mention' | 'invite' | 'ai';
 import type { ElementType } from 'react';
 
@@ -34,6 +35,7 @@ export interface Message {
   type: MessageType;
   isMine?: boolean;
   deliveryStatus?: 'sending' | 'sent' | 'failed';
+  deletedForEveryone?: boolean;
   reactions?: Array<{
     emoji: string;
     count: number;
@@ -45,6 +47,7 @@ export interface Message {
   fileUrl?: string;
   mimeType?: string;
   pinned?: boolean;
+  starred?: boolean;
   edited?: boolean;
   isGroupStart?: boolean;
   replyTo?: {
@@ -70,6 +73,7 @@ export interface Workspace {
   description: string;
   color: string;
   inviteCode: string;
+  photoUrl?: string;
 }
 
 export interface TeamMember {

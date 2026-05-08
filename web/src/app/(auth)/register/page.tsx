@@ -4,6 +4,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
+import AuthThemeToggle from '@/components/auth/AuthThemeToggle';
 import { getSupabaseBrowserClient } from '@/lib/supabaseClient';
 
 export default function RegisterPage() {
@@ -85,6 +86,7 @@ export default function RegisterPage() {
 
   return (
     <div className="flex min-h-screen">
+      <AuthThemeToggle />
 
       {/* KIRI — Branded Panel */}
       <div className="hidden lg:flex w-[45%] bg-indigo-950 flex-col justify-between p-10 relative overflow-hidden">

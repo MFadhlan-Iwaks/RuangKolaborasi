@@ -1,14 +1,16 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import {
   SlidersHorizontal,
   Files,
   Hash,
   Loader2,
   MoreVertical,
+  Moon,
   Search,
   Sparkles,
+  Sun,
   UserPlus,
 } from 'lucide-react';
 import { NotificationItem, Room, Status, Workspace } from '@/types';
@@ -31,6 +33,7 @@ interface WorkspaceHeaderProps {
   isSummarizing: boolean;
   canSummarize: boolean;
   canManageWorkspace: boolean;
+  isDarkMode: boolean;
   onSearchChange: (query: string) => void;
   onInvite: () => void;
   onSummarize: () => void;
@@ -38,6 +41,7 @@ interface WorkspaceHeaderProps {
   onOpenChannelSettings: () => void;
   onOpenSettings: () => void;
   onOpenProfile: () => void;
+  onToggleTheme: (event: MouseEvent<HTMLButtonElement>) => void;
   onLogout: () => void;
   onAcceptInvite: (notification: NotificationItem) => void;
   onDeclineInvite: (notification: NotificationItem) => void;
@@ -59,6 +63,7 @@ export default function WorkspaceHeader({
   isSummarizing,
   canSummarize,
   canManageWorkspace,
+  isDarkMode,
   onSearchChange,
   onInvite,
   onSummarize,
@@ -66,6 +71,7 @@ export default function WorkspaceHeader({
   onOpenChannelSettings,
   onOpenSettings,
   onOpenProfile,
+  onToggleTheme,
   onLogout,
   onAcceptInvite,
   onDeclineInvite,
@@ -202,6 +208,18 @@ export default function WorkspaceHeader({
           onAcceptInvite={onAcceptInvite}
           onDeclineInvite={onDeclineInvite}
         />
+        <button
+          type="button"
+          onClick={onToggleTheme}
+          title={isDarkMode ? 'Mode terang' : 'Mode gelap'}
+          className="rounded-lg p-2 text-gray-400 transition-all hover:-translate-y-0.5 hover:bg-gray-50 hover:text-gray-600 active:translate-y-0 active:scale-95"
+        >
+          {isDarkMode ? (
+            <Sun key="sun" size={20} className="theme-toggle-icon" />
+          ) : (
+            <Moon key="moon" size={20} className="theme-toggle-icon" />
+          )}
+        </button>
         <UserProfileDropdown
           name={currentUserName}
           email={currentUserEmail}

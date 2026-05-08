@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   CurrentUser,
+  ChatBackground,
   FileCategory,
   Message,
   MessageFilter,
@@ -24,6 +25,7 @@ import WorkspaceSkeleton from '@/components/workspace/WorkspaceSkeleton';
 import ToastStack from '@/components/ui/ToastStack';
 import { useGemini } from '@/hooks/useGemini';
 import { useDragDrop } from '@/hooks/useDragDrop';
+import { useTheme } from '@/hooks/useTheme';
 import { useWorkspaceViewState } from '@/hooks/useWorkspaceViewState';
 import {
   formatFileSize,
@@ -82,9 +84,12 @@ export default function WorkspacePage() {
   const [deleteConfirmRoomId, setDeleteConfirmRoomId] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [messageFilter, setMessageFilter] = useState<MessageFilter>('all');
+  const [chatBackground, setChatBackground] = useState<ChatBackground>('pattern');
   const [replyToMessage, setReplyToMessage] = useState<Message | null>(null);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [deletingMessage, setDeletingMessage] = useState<Message | null>(null);
+  const [infoMessage, setInfoMessage] = useState<Message | null>(null);
+  const [forwardingMessage, setForwardingMessage] = useState<Message | null>(null);
   const [typingUser, setTypingUser] = useState('');
   const [showFilePanel, setShowFilePanel] = useState(true);
   const [fileCategory, setFileCategory] = useState<FileCategory>('all');
@@ -103,6 +108,7 @@ export default function WorkspacePage() {
 
   const { summarize, isSummarizing, summaryResult, clearSummary } = useGemini();
   const { isDragging, dragHandlers } = useDragDrop({ onFileDrop: handleFileDrop });
+  const { isDarkMode, toggleTheme } = useTheme();
   const currentUserName = currentUser?.name ?? 'Kamu';
   const currentUserEmail = currentUser?.email ?? 'user@local.test';
   const currentUserInitial = currentUser?.initial ?? 'K';
@@ -551,11 +557,15 @@ export default function WorkspacePage() {
     }
   }
 
-  function handleUpdateProfile(profile: { photoUrl?: string; bio: string }) {
+  function handleUpdateProfile(profile: { name: string; photoUrl?: string; bio: string }) {
+    const nextInitial = makeInitials(profile.name).slice(0, 2) || currentUserInitial;
+
     setCurrentUser((prev) =>
       prev
         ? {
             ...prev,
+            name: profile.name,
+            initial: nextInitial,
             photoUrl: profile.photoUrl,
             bio: profile.bio,
           }
@@ -567,12 +577,30 @@ export default function WorkspacePage() {
           workspaceId,
           workspaceMembers.map((member) =>
             member.id === currentUserId
-              ? { ...member, bio: profile.bio, photoUrl: profile.photoUrl }
+              ? {
+                  ...member,
+                  name: profile.name,
+                  avatar: currentUserAvatar,
+                  bio: profile.bio,
+                  photoUrl: profile.photoUrl,
+                }
               : member
           ),
         ])
       )
     );
+    updateCurrentRoomMessages((currentMessages) =>
+      currentMessages.map((message) =>
+        message.senderId === currentUserId || message.isMine
+          ? { ...message, user: `${profile.name} (Kamu)` }
+          : message
+      )
+    );
+    showToast({
+      type: 'success',
+      title: 'Profil diperbarui',
+      description: profile.name,
+    });
   }
 
   function handleAcceptInvite(notification: NotificationItem) {
@@ -1030,6 +1058,52 @@ export default function WorkspacePage() {
     }
   }
 
+  function handleDeleteMessageForMe(messageId: Message['id']) {
+    if (typeof messageId === 'string') delete retryPayloadsRef.current[messageId];
+
+    updateCurrentRoomMessages((currentMessages) =>
+      currentMessages.filter((message) => message.id !== messageId)
+    );
+    setReplyToMessage((current) => (current?.id === messageId ? null : current));
+    setEditingMessage((current) => (current?.id === messageId ? null : current));
+    showToast({
+      type: 'info',
+      title: 'Pesan dihapus untuk kamu',
+    });
+  }
+
+  function handleDeleteMessageForEveryone(message: Message) {
+    if (typeof message.id === 'string') delete retryPayloadsRef.current[message.id];
+
+    updateCurrentRoomMessages((currentMessages) =>
+      currentMessages.map((item) =>
+        item.id === message.id
+          ? {
+              ...item,
+              type: 'text',
+              text: undefined,
+              fileName: undefined,
+              fileSize: undefined,
+              fileUrl: undefined,
+              mimeType: undefined,
+              replyTo: undefined,
+              pinned: false,
+              reactions: [],
+              deliveryStatus: undefined,
+              deletedForEveryone: true,
+            }
+          : item
+      )
+    );
+    setReplyToMessage((current) => (current?.id === message.id ? null : current));
+    setEditingMessage((current) => (current?.id === message.id ? null : current));
+    showToast({
+      type: 'info',
+      title: 'Pesan dihapus untuk semua orang',
+      description: 'Tampilan ini masih disimpan di frontend sampai backend mendukung tombstone message.',
+    });
+  }
+
   function handleStartEdit(message: Message) {
     setEditingMessage(message);
   }
@@ -1124,6 +1198,62 @@ export default function WorkspacePage() {
     );
   }
 
+  function handleToggleStar(messageId: Message['id']) {
+    updateCurrentRoomMessages((currentMessages) =>
+      currentMessages.map((message) =>
+        message.id === messageId
+          ? { ...message, starred: !message.starred }
+          : message
+      )
+    );
+  }
+
+  function handleConfirmForward(roomId: string) {
+    if (!forwardingMessage || !activeWorkspaceId) return;
+
+    const targetRoom = rooms.find((room) => room.id === roomId);
+    const forwardedMessage: Message = {
+      ...forwardingMessage,
+      id: `forward-${Date.now()}`,
+      user: currentUserName,
+      avatar: currentUserAvatar,
+      senderId: currentUserId,
+      isMine: true,
+      time: new Date().toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+      pinned: false,
+      starred: false,
+      reactions: [],
+      replyTo: {
+        user: forwardingMessage.user,
+        preview: forwardingMessage.text ?? forwardingMessage.fileName ?? 'Lampiran',
+      },
+      text: forwardingMessage.text
+        ? `Diteruskan: ${forwardingMessage.text}`
+        : forwardingMessage.text,
+    };
+
+    setMessagesByWorkspace((prev) => {
+      const targetMessages = prev[activeWorkspaceId]?.[roomId] ?? [];
+
+      return {
+        ...prev,
+        [activeWorkspaceId]: {
+          ...(prev[activeWorkspaceId] ?? {}),
+          [roomId]: [...targetMessages, forwardedMessage],
+        },
+      };
+    });
+    setForwardingMessage(null);
+    showToast({
+      type: 'success',
+      title: 'Pesan diteruskan',
+      description: targetRoom ? `Ke #${targetRoom.name}` : undefined,
+    });
+  }
+
   async function handleCopyFileLink(message: Message) {
     if (!message.fileUrl) {
       showToast({
@@ -1146,39 +1276,63 @@ export default function WorkspacePage() {
     }
   }
 
-  function handleMockDownload(message: Message) {
-    if (message.fileUrl) {
-      window.open(message.fileUrl, '_blank', 'noopener,noreferrer');
-      setFileNotice(`${message.fileName} dibuka di tab baru.`);
+  async function handleDownloadFile(message: Message) {
+    if (!message.fileUrl) {
+      setFileNotice(`${message.fileName} belum memiliki URL download.`);
       showToast({
-        type: 'info',
-        title: 'File dibuka',
+        type: 'error',
+        title: 'Download belum tersedia',
         description: message.fileName,
       });
       window.setTimeout(() => setFileNotice(''), 2200);
       return;
     }
 
-    setFileNotice(`${message.fileName} belum memiliki URL download.`);
-    showToast({
-      type: 'error',
-      title: 'Download belum tersedia',
-      description: message.fileName,
-    });
-    window.setTimeout(() => setFileNotice(''), 2200);
+    try {
+      setFileNotice(`Menyiapkan download ${message.fileName}...`);
+      const response = await fetch(message.fileUrl);
+
+      if (!response.ok) {
+        throw new Error(`Gagal mengambil file (${response.status}).`);
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+
+      link.href = url;
+      link.download = message.fileName || 'ruangkolaborasi-file';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+
+      setFileNotice(`${message.fileName} berhasil diunduh.`);
+      showToast({
+        type: 'success',
+        title: 'Download dimulai',
+        description: message.fileName,
+      });
+    } catch (error) {
+      showActionError('Gagal download file', error);
+      setFileNotice(`${message.fileName} gagal diunduh.`);
+    } finally {
+      window.setTimeout(() => setFileNotice(''), 2200);
+    }
   }
 
   async function handleUpdateWorkspace(
-    updates: Pick<Workspace, 'name' | 'shortName' | 'description' | 'color'>
+    updates: Pick<Workspace, 'name' | 'shortName' | 'description' | 'color' | 'photoUrl'>
   ) {
     try {
       setBusyActions((prev) => ({ ...prev, updateWorkspace: true }));
+      const { photoUrl, ...workspaceUpdates } = updates;
       const { workspace } = await apiFetch<UpdateWorkspaceResponse>(
         `/api/workspaces/${activeWorkspaceId}`,
         {
           method: 'PATCH',
           accessToken: await getAccessToken(),
-          body: JSON.stringify(updates),
+          body: JSON.stringify(workspaceUpdates),
         }
       );
       const nextWorkspace = toWorkspace(
@@ -1189,7 +1343,7 @@ export default function WorkspacePage() {
       setWorkspaces((prev) =>
         prev.map((item) =>
           item.id === activeWorkspaceId
-            ? { ...item, ...nextWorkspace, shortName: updates.shortName }
+            ? { ...item, ...nextWorkspace, shortName: updates.shortName, photoUrl }
             : item
         )
       );
@@ -1693,6 +1847,7 @@ export default function WorkspacePage() {
         workspaceName={activeWorkspace.name}
         workspaceInitials={activeWorkspace.shortName}
         workspaceColor={activeWorkspace.color}
+        workspacePhotoUrl={activeWorkspace.photoUrl}
         currentUserName={currentUserName}
         currentUserInitial={currentUserInitial}
         currentUserPhotoUrl={currentUserPhotoUrl}
@@ -1741,6 +1896,7 @@ export default function WorkspacePage() {
           isSummarizing={isSummarizing}
           canSummarize={messages.length > 0}
           canManageWorkspace={canManageWorkspace}
+          isDarkMode={isDarkMode}
           onSearchChange={setSearchQuery}
           onInvite={() => {
             setInviteMessage('');
@@ -1751,6 +1907,7 @@ export default function WorkspacePage() {
           onOpenChannelSettings={() => setShowChannelSettings(true)}
           onOpenSettings={() => setShowWorkspaceSettings(true)}
           onOpenProfile={() => setShowUserProfile(true)}
+          onToggleTheme={toggleTheme}
           onLogout={handleLogout}
           onAcceptInvite={handleAcceptInvite}
           onDeclineInvite={handleDeclineInvite}
@@ -1758,20 +1915,25 @@ export default function WorkspacePage() {
 
         <WorkspaceChatArea
           activeRoom={activeRoom}
+          rooms={rooms}
           messages={messages}
           filteredMessages={filteredMessages}
           pinnedMessages={pinnedMessages}
           channelFiles={channelFiles}
           filteredChannelFiles={filteredChannelFiles}
           messageFilter={messageFilter}
+          chatBackground={chatBackground}
           searchQuery={searchQuery}
           typingUser={typingUser}
           draftFile={draftFile}
           replyToMessage={replyToMessage}
+          editingMessage={editingMessage}
           showFilePanel={showFilePanel}
           fileCategory={fileCategory}
           fileNotice={fileNotice}
           selectedFileMessage={selectedFileMessage}
+          infoMessage={infoMessage}
+          forwardingMessage={forwardingMessage}
           isDragging={isDragging}
           isSending={!!busyActions.sendMessage}
           canManageChannels={canManageWorkspace}
@@ -1782,22 +1944,27 @@ export default function WorkspacePage() {
           }}
           onOpenFilePanel={() => setShowFilePanel(true)}
           onFilterChange={setMessageFilter}
+          onBackgroundChange={setChatBackground}
           onSendMessage={handleSendMessage}
+          onSaveEditMessage={handleSaveEdit}
           onDraftFileChange={setDraftFile}
           onCancelReply={() => setReplyToMessage(null)}
+          onCancelEdit={() => setEditingMessage(null)}
           onReply={setReplyToMessage}
           onTogglePin={handleTogglePin}
           onEdit={handleStartEdit}
-          onDelete={(messageId) => {
-            const targetMessage = messages.find((message) => message.id === messageId);
-            if (targetMessage) setDeletingMessage(targetMessage);
-          }}
           onRetryMessage={handleRetryMessage}
+          onInfoMessage={setInfoMessage}
+          onForwardMessage={setForwardingMessage}
+          onConfirmForward={handleConfirmForward}
+          onToggleStar={handleToggleStar}
           onToggleReaction={handleToggleReaction}
+          onDeleteForMe={handleDeleteMessageForMe}
+          onDeleteForEveryone={handleDeleteMessageForEveryone}
           onFileCategoryChange={setFileCategory}
           onCloseFilePanel={() => setShowFilePanel(false)}
           onPreviewFile={setSelectedFileMessage}
-          onDownloadFile={handleMockDownload}
+          onDownloadFile={handleDownloadFile}
           onCopyFileLink={handleCopyFileLink}
           onCreateChannel={() => setShowChannelModal(true)}
         />
@@ -1816,7 +1983,7 @@ export default function WorkspacePage() {
           showDeleteChannelModal={showDeleteChannelModal}
           showInviteModal={showInviteModal}
           workspaceModal={workspaceModal}
-          editingMessage={editingMessage}
+          editingMessage={null}
           deletingMessage={deletingMessage}
           incomingInvites={incomingInvites}
           inviteMessage={inviteMessage}

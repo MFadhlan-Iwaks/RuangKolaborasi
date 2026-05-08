@@ -2,30 +2,37 @@
 
 import type { HTMLAttributes } from 'react';
 import { Archive, Hash, Sparkles } from 'lucide-react';
-import { FileCategory, Message, MessageFilter, Room } from '@/types';
+import { ChatBackground, FileCategory, Message, MessageFilter, Room } from '@/types';
 import ChatInput from '@/components/chat/ChatInput';
 import MessageFilterBar from '@/components/chat/MessageFilterBar';
 import MessageList from '@/components/chat/MessageList';
+import ForwardMessageModal from '@/components/chat/ForwardMessageModal';
+import MessageInfoModal from '@/components/chat/MessageInfoModal';
 import FilePanel from '@/components/workspace/FilePanel';
 import FilePreviewModal from '@/components/workspace/FilePreviewModal';
 import { getMessagePreview } from '@/lib/workspaceUtils';
 
 interface WorkspaceChatAreaProps {
   activeRoom?: Room;
+  rooms: Room[];
   messages: Message[];
   filteredMessages: Message[];
   pinnedMessages: Message[];
   channelFiles: Message[];
   filteredChannelFiles: Message[];
   messageFilter: MessageFilter;
+  chatBackground: ChatBackground;
   searchQuery: string;
   typingUser: string;
   draftFile: File | null;
   replyToMessage: Message | null;
+  editingMessage: Message | null;
   showFilePanel: boolean;
   fileCategory: FileCategory;
   fileNotice: string;
   selectedFileMessage: Message | null;
+  infoMessage: Message | null;
+  forwardingMessage: Message | null;
   isDragging: boolean;
   isSending?: boolean;
   canManageChannels: boolean;
@@ -33,15 +40,23 @@ interface WorkspaceChatAreaProps {
   onClearSearch: () => void;
   onOpenFilePanel: () => void;
   onFilterChange: (filter: MessageFilter) => void;
+  onBackgroundChange: (background: ChatBackground) => void;
   onSendMessage: (text: string, file?: File) => void;
+  onSaveEditMessage: (message: Message, text: string) => void;
   onDraftFileChange: (file: File | null) => void;
   onCancelReply: () => void;
+  onCancelEdit: () => void;
   onReply: (message: Message) => void;
   onTogglePin: (messageId: Message['id']) => void;
   onEdit: (message: Message) => void;
-  onDelete: (messageId: Message['id']) => void;
   onRetryMessage: (message: Message) => void;
+  onInfoMessage: (message: Message | null) => void;
+  onForwardMessage: (message: Message | null) => void;
+  onConfirmForward: (roomId: string) => void;
+  onToggleStar: (messageId: Message['id']) => void;
   onToggleReaction: (messageId: Message['id'], emoji: string) => void;
+  onDeleteForMe: (messageId: Message['id']) => void;
+  onDeleteForEveryone: (message: Message) => void;
   onFileCategoryChange: (category: FileCategory) => void;
   onCloseFilePanel: () => void;
   onPreviewFile: (message: Message | null) => void;
@@ -52,20 +67,25 @@ interface WorkspaceChatAreaProps {
 
 export default function WorkspaceChatArea({
   activeRoom,
+  rooms,
   messages,
   filteredMessages,
   pinnedMessages,
   channelFiles,
   filteredChannelFiles,
   messageFilter,
+  chatBackground,
   searchQuery,
   typingUser,
   draftFile,
   replyToMessage,
+  editingMessage,
   showFilePanel,
   fileCategory,
   fileNotice,
   selectedFileMessage,
+  infoMessage,
+  forwardingMessage,
   isDragging,
   isSending = false,
   canManageChannels,
@@ -73,16 +93,24 @@ export default function WorkspaceChatArea({
   onClearSearch,
   onOpenFilePanel,
   onFilterChange,
+  onBackgroundChange,
   onSendMessage,
+  onSaveEditMessage,
   onDraftFileChange,
   onCancelReply,
+  onCancelEdit,
   onReply,
   onTogglePin,
   onEdit,
-  onDelete,
   onRetryMessage,
   onToggleReaction,
+  onDeleteForMe,
+  onDeleteForEveryone,
   onFileCategoryChange,
+  onInfoMessage,
+  onForwardMessage,
+  onConfirmForward,
+  onToggleStar,
   onCloseFilePanel,
   onPreviewFile,
   onDownloadFile,
@@ -124,9 +152,11 @@ export default function WorkspaceChatArea({
     <>
       <MessageFilterBar
         filter={messageFilter}
+        background={chatBackground}
         visibleCount={filteredMessages.length}
         totalCount={messages.length}
         onFilterChange={onFilterChange}
+        onBackgroundChange={onBackgroundChange}
       />
 
       <div className="flex min-h-0 flex-1">
@@ -169,6 +199,7 @@ export default function WorkspaceChatArea({
 
           <MessageList
             messages={filteredMessages}
+            background={chatBackground}
             emptyTitle={
               searchQuery || messageFilter !== 'all'
                 ? 'Tidak ada pesan yang cocok'
@@ -183,9 +214,13 @@ export default function WorkspaceChatArea({
             onReply={onReply}
             onTogglePin={onTogglePin}
             onEdit={onEdit}
-            onDelete={onDelete}
             onRetry={onRetryMessage}
+            onInfo={onInfoMessage}
+            onForward={onForwardMessage}
+            onToggleStar={onToggleStar}
             onToggleReaction={onToggleReaction}
+            onDeleteForMe={onDeleteForMe}
+            onDeleteForEveryone={onDeleteForEveryone}
             onPreviewFile={onPreviewFile}
             onDownloadFile={onDownloadFile}
             onCopyFileLink={onCopyFileLink}
@@ -201,12 +236,16 @@ export default function WorkspaceChatArea({
           />
 
           <ChatInput
+            key={editingMessage ? `edit-${editingMessage.id}` : 'compose'}
             onSendMessage={onSendMessage}
             activeRoom={activeRoom?.name ?? 'channel ini'}
             draftFile={draftFile}
             onDraftFileChange={onDraftFileChange}
             replyTo={replyToMessage}
+            editingMessage={editingMessage}
             onCancelReply={onCancelReply}
+            onCancelEdit={onCancelEdit}
+            onSaveEdit={onSaveEditMessage}
             isSending={isSending}
             disabled={!!activeRoom.archived}
             disabledReason="Channel ini diarsipkan. Pulihkan dulu untuk mengirim pesan."
@@ -250,6 +289,23 @@ export default function WorkspaceChatArea({
             file={selectedFileMessage}
             onClose={() => onPreviewFile(null)}
             onDownload={onDownloadFile}
+          />
+        )}
+
+        {infoMessage && (
+          <MessageInfoModal
+            message={infoMessage}
+            onClose={() => onInfoMessage(null)}
+          />
+        )}
+
+        {forwardingMessage && (
+          <ForwardMessageModal
+            message={forwardingMessage}
+            rooms={rooms}
+            activeRoomId={activeRoom.id}
+            onClose={() => onForwardMessage(null)}
+            onForward={onConfirmForward}
           />
         )}
       </div>
