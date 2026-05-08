@@ -2,9 +2,13 @@ const express = require('express');
 const { requireAuth } = require('../middleware/auth');
 const { asyncHandler } = require('../middleware/asyncHandler');
 const { supabaseAdmin } = require('../config/supabase');
+const crypto = require('crypto');
 
 const router = express.Router();
 const STORAGE_BUCKET = 'workspace-files';
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
+const MAX_BASE64_CHARS = Math.ceil(MAX_FILE_BYTES / 3) * 4 + 16;
+const ADMIN_ROLES = ['owner', 'admin'];
 
 function getDisplayName(user) {
   const metadata = user.user_metadata || {};
@@ -53,9 +57,10 @@ async function ensureDefaultWorkspace(user) {
       description: 'Workspace awal untuk mulai berdiskusi.',
       short_name: 'WS',
       color: 'bg-blue-600',
+      invite_code: await createUniqueInviteCode(),
       owner_id: user.id
     })
-    .select('id, name, description, short_name, color, owner_id, created_at')
+    .select('id, name, description, short_name, color, invite_code, owner_id, created_at')
     .single();
 
   if (workspaceError) {
@@ -140,9 +145,73 @@ async function assertWorkspaceMember(workspaceId, userId) {
   return data;
 }
 
+async function assertWorkspaceRole(workspaceId, userId, allowedRoles) {
+  const member = await assertWorkspaceMember(workspaceId, userId);
+
+  if (!allowedRoles.includes(member.role)) {
+    const forbidden = new Error('You do not have permission to perform this action');
+    forbidden.status = 403;
+    throw forbidden;
+  }
+
+  return member;
+}
+
 function normalizeRole(role) {
   const normalized = String(role || 'member').toLowerCase();
   return ['owner', 'admin', 'member'].includes(normalized) ? normalized : 'member';
+}
+
+function assertAssignableInviteRole(requesterRole, requestedRole) {
+  if (requestedRole === 'owner') {
+    const error = new Error('Owner role cannot be assigned through invites');
+    error.status = 400;
+    throw error;
+  }
+
+  if (requestedRole === 'admin' && requesterRole !== 'owner') {
+    const error = new Error('Only workspace owners can invite admins');
+    error.status = 403;
+    throw error;
+  }
+}
+
+function generateInviteCode() {
+  return `RK-${crypto.randomBytes(5).toString('hex').toUpperCase()}`;
+}
+
+function normalizeInviteCode(inviteCode) {
+  return String(inviteCode || '').trim().toUpperCase();
+}
+
+function validateInviteCode(inviteCode) {
+  if (!/^[A-Z0-9-]{8,32}$/.test(inviteCode)) {
+    const error = new Error('Invalid invite code');
+    error.status = 400;
+    throw error;
+  }
+}
+
+async function createUniqueInviteCode() {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const inviteCode = generateInviteCode();
+    const { data, error } = await supabaseAdmin
+      .from('workspaces')
+      .select('id')
+      .eq('invite_code', inviteCode)
+      .maybeSingle();
+
+    if (error) {
+      error.status = 500;
+      throw error;
+    }
+
+    if (!data) return inviteCode;
+  }
+
+  const error = new Error('Unable to generate invite code');
+  error.status = 500;
+  throw error;
 }
 
 function safeStorageName(fileName) {
@@ -274,7 +343,7 @@ async function buildBootstrapPayload(user) {
 
   const { data: memberships, error: membershipError } = await supabaseAdmin
     .from('workspace_members')
-    .select('workspace_id')
+    .select('workspace_id, role')
     .eq('user_id', user.id);
 
   if (membershipError) {
@@ -282,16 +351,20 @@ async function buildBootstrapPayload(user) {
     throw membershipError;
   }
 
+  const membershipRolesByWorkspace = Object.fromEntries(
+    (memberships || []).map((membership) => [membership.workspace_id, membership.role])
+  );
   let workspaceIds = (memberships || []).map((membership) => membership.workspace_id);
 
   if (workspaceIds.length === 0) {
     const workspace = await ensureDefaultWorkspace(user);
+    membershipRolesByWorkspace[workspace.id] = 'owner';
     workspaceIds = [workspace.id];
   }
 
   const { data: workspaces, error: workspaceError } = await supabaseAdmin
     .from('workspaces')
-    .select('id, name, description, short_name, color, owner_id, created_at')
+    .select('id, name, description, short_name, color, invite_code, owner_id, created_at')
     .in('id', workspaceIds)
     .order('created_at', { ascending: true });
 
@@ -303,8 +376,13 @@ async function buildBootstrapPayload(user) {
   const roomsByWorkspace = {};
   const messagesByWorkspace = {};
   const membersByWorkspace = {};
+  const responseWorkspaces = (workspaces || []).map((workspace) => (
+    ADMIN_ROLES.includes(membershipRolesByWorkspace[workspace.id])
+      ? workspace
+      : { ...workspace, invite_code: null }
+  ));
 
-  for (const workspace of workspaces || []) {
+  for (const workspace of responseWorkspaces) {
     const { data: members, error: membersError } = await supabaseAdmin
       .from('workspace_members')
       .select('id, workspace_id, user_id, role, profiles:user_id(id, full_name, username, avatar_url, status)')
@@ -365,7 +443,7 @@ async function buildBootstrapPayload(user) {
   }
 
   return {
-    workspaces: workspaces || [],
+    workspaces: responseWorkspaces,
     roomsByWorkspace,
     messagesByWorkspace,
     membersByWorkspace
@@ -397,9 +475,10 @@ router.post('/', requireAuth, asyncHandler(async (req, res) => {
       description: description || `Workspace untuk kolaborasi ${name}.`,
       short_name: req.body.shortName || null,
       color: req.body.color || 'bg-blue-600',
+      invite_code: await createUniqueInviteCode(),
       owner_id: req.user.id
     })
-    .select('id, name, description, short_name, color, owner_id, created_at')
+    .select('id, name, description, short_name, color, invite_code, owner_id, created_at')
     .single();
 
   if (error) {
@@ -432,7 +511,7 @@ router.patch('/:workspaceId', requireAuth, asyncHandler(async (req, res) => {
   const shortName = req.body.shortName ? String(req.body.shortName).trim().slice(0, 3).toUpperCase() : null;
   const color = req.body.color ? String(req.body.color).trim() : null;
 
-  await assertWorkspaceMember(workspaceId, req.user.id);
+  await assertWorkspaceRole(workspaceId, req.user.id, ADMIN_ROLES);
 
   const updates = {};
   if (name) updates.name = name;
@@ -444,7 +523,7 @@ router.patch('/:workspaceId', requireAuth, asyncHandler(async (req, res) => {
     .from('workspaces')
     .update(updates)
     .eq('id', workspaceId)
-    .select('id, name, description, short_name, color, owner_id, created_at')
+    .select('id, name, description, short_name, color, invite_code, owner_id, created_at')
     .single();
 
   if (error) {
@@ -500,7 +579,7 @@ router.post('/:workspaceId/channels', requireAuth, asyncHandler(async (req, res)
     });
   }
 
-  await assertWorkspaceMember(workspaceId, req.user.id);
+  await assertWorkspaceRole(workspaceId, req.user.id, ADMIN_ROLES);
 
   const { data: channel, error } = await supabaseAdmin
     .from('channels')
@@ -526,6 +605,8 @@ router.post('/:workspaceId/channels', requireAuth, asyncHandler(async (req, res)
 router.patch('/channels/:channelId', requireAuth, asyncHandler(async (req, res) => {
   const channel = await getChannelWithMembership(req.params.channelId, req.user.id);
   const updates = {};
+
+  await assertWorkspaceRole(channel.workspace_id, req.user.id, ADMIN_ROLES);
 
   if (typeof req.body.name === 'string' && req.body.name.trim()) {
     updates.name = req.body.name.trim();
@@ -561,6 +642,8 @@ router.patch('/channels/:channelId', requireAuth, asyncHandler(async (req, res) 
 router.delete('/channels/:channelId', requireAuth, asyncHandler(async (req, res) => {
   const channel = await getChannelWithMembership(req.params.channelId, req.user.id);
 
+  await assertWorkspaceRole(channel.workspace_id, req.user.id, ADMIN_ROLES);
+
   const { error } = await supabaseAdmin
     .from('channels')
     .delete()
@@ -586,7 +669,8 @@ router.post('/:workspaceId/invite', requireAuth, asyncHandler(async (req, res) =
     });
   }
 
-  await assertWorkspaceMember(workspaceId, req.user.id);
+  const requester = await assertWorkspaceRole(workspaceId, req.user.id, ADMIN_ROLES);
+  assertAssignableInviteRole(requester.role, role);
 
   const invitedUser = await findUserByEmail(email);
 
@@ -630,7 +714,7 @@ router.post('/:workspaceId/invite', requireAuth, asyncHandler(async (req, res) =
 }));
 
 router.post('/join/:inviteCode', requireAuth, asyncHandler(async (req, res) => {
-  const inviteCode = String(req.params.inviteCode || '').trim().toLowerCase();
+  const inviteCode = normalizeInviteCode(req.params.inviteCode);
 
   if (!inviteCode) {
     return res.status(400).json({
@@ -639,18 +723,18 @@ router.post('/join/:inviteCode', requireAuth, asyncHandler(async (req, res) => {
     });
   }
 
-  const { data: workspaces, error: workspaceError } = await supabaseAdmin
+  validateInviteCode(inviteCode);
+
+  const { data: workspace, error: workspaceError } = await supabaseAdmin
     .from('workspaces')
-    .select('id, name, description, owner_id, created_at');
+    .select('id, name, description, short_name, color, invite_code, owner_id, created_at')
+    .eq('invite_code', inviteCode)
+    .maybeSingle();
 
   if (workspaceError) {
     workspaceError.status = 500;
     throw workspaceError;
   }
-
-  const workspace = (workspaces || []).find((item) =>
-    item.id.toLowerCase().startsWith(inviteCode)
-  );
 
   if (!workspace) {
     return res.status(404).json({
@@ -679,7 +763,10 @@ router.post('/join/:inviteCode', requireAuth, asyncHandler(async (req, res) => {
   const channel = await ensureDefaultChannel(workspace.id, workspace.owner_id);
 
   res.json({
-    workspace,
+    workspace: {
+      ...workspace,
+      invite_code: null
+    },
     channel
   });
 }));
@@ -768,26 +855,46 @@ router.delete('/messages/:messageId', requireAuth, asyncHandler(async (req, res)
   }
 
   if (message.file_id) {
-    const { data: file } = await supabaseAdmin
+    const { data: file, error: fileLookupError } = await supabaseAdmin
       .from('files')
       .select('id, bucket_name, storage_path')
       .eq('id', message.file_id)
       .maybeSingle();
 
-    await supabaseAdmin
+    if (fileLookupError) {
+      fileLookupError.status = 500;
+      throw fileLookupError;
+    }
+
+    if (file) {
+      const { error: storageError } = await supabaseAdmin.storage
+        .from(file.bucket_name || STORAGE_BUCKET)
+        .remove([file.storage_path]);
+
+      if (storageError) {
+        storageError.status = 500;
+        throw storageError;
+      }
+
+      const { error: fileDeleteError } = await supabaseAdmin
+        .from('files')
+        .delete()
+        .eq('id', file.id);
+
+      if (fileDeleteError) {
+        fileDeleteError.status = 500;
+        throw fileDeleteError;
+      }
+    }
+
+    const { error: messageDeleteError } = await supabaseAdmin
       .from('messages')
       .delete()
       .eq('id', message.id);
 
-    if (file) {
-      await supabaseAdmin.storage
-        .from(file.bucket_name || STORAGE_BUCKET)
-        .remove([file.storage_path]);
-
-      await supabaseAdmin
-        .from('files')
-        .delete()
-        .eq('id', file.id);
+    if (messageDeleteError) {
+      messageDeleteError.status = 500;
+      throw messageDeleteError;
     }
   } else {
     const { error } = await supabaseAdmin
@@ -820,7 +927,36 @@ router.post('/channels/:channelId/files', requireAuth, asyncHandler(async (req, 
     });
   }
 
+  if (contentBase64.length > MAX_BASE64_CHARS) {
+    return res.status(413).json({
+      error: 'Payload Too Large',
+      message: `File maksimal ${(MAX_FILE_BYTES / 1024 / 1024).toFixed(0)} MB`
+    });
+  }
+
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(contentBase64)) {
+    return res.status(400).json({
+      error: 'Bad Request',
+      message: 'contentBase64 is not valid base64'
+    });
+  }
+
+  if (fileSize && (!Number.isFinite(fileSize) || fileSize < 0 || fileSize > MAX_FILE_BYTES)) {
+    return res.status(413).json({
+      error: 'Payload Too Large',
+      message: `File maksimal ${(MAX_FILE_BYTES / 1024 / 1024).toFixed(0)} MB`
+    });
+  }
+
   const buffer = Buffer.from(contentBase64, 'base64');
+
+  if (buffer.length > MAX_FILE_BYTES) {
+    return res.status(413).json({
+      error: 'Payload Too Large',
+      message: `File maksimal ${(MAX_FILE_BYTES / 1024 / 1024).toFixed(0)} MB`
+    });
+  }
+
   const storagePath = `${channel.workspace_id}/${channel.id}/${Date.now()}-${fileName}`;
 
   const { error: uploadError } = await supabaseAdmin.storage
@@ -851,6 +987,10 @@ router.post('/channels/:channelId/files', requireAuth, asyncHandler(async (req, 
     .single();
 
   if (fileError) {
+    await supabaseAdmin.storage
+      .from(STORAGE_BUCKET)
+      .remove([storagePath]);
+
     fileError.status = 500;
     throw fileError;
   }
@@ -869,6 +1009,15 @@ router.post('/channels/:channelId/files', requireAuth, asyncHandler(async (req, 
     .single();
 
   if (messageError) {
+    await supabaseAdmin.storage
+      .from(file.bucket_name || STORAGE_BUCKET)
+      .remove([file.storage_path]);
+
+    await supabaseAdmin
+      .from('files')
+      .delete()
+      .eq('id', file.id);
+
     messageError.status = 500;
     throw messageError;
   }

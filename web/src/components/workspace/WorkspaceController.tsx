@@ -137,6 +137,9 @@ export default function WorkspacePage() {
     searchQuery,
     currentUserName,
   });
+  const currentWorkspaceRole = members.find((member) => member.id === currentUserId)?.role;
+  const canManageWorkspace =
+    currentWorkspaceRole === 'Owner' || currentWorkspaceRole === 'Admin';
 
   function showToast(toast: Omit<ToastMessage, 'id'>) {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -302,7 +305,34 @@ export default function WorkspacePage() {
             return;
           }
 
-          const nextMessage = toMessage(row, currentUser);
+          const senderMember = membersByWorkspace[activeWorkspaceId]?.find(
+            (member) => member.id === row.sender_id
+          );
+          let senderName = row.sender_name || senderMember?.name;
+
+          if (!senderName && row.sender_id !== currentUser.id) {
+            const { data: profile, error } = await supabase
+              .from('profiles')
+              .select('full_name, username')
+              .eq('id', row.sender_id)
+              .maybeSingle();
+
+            if (error) {
+              console.error('Gagal memuat nama pengirim realtime:', getReadableError(error), error);
+            } else {
+              senderName = getDisplayName({
+                fullName: profile?.full_name,
+                username: profile?.username,
+              });
+            }
+          }
+
+          const rowWithSenderName: BootstrapMessageRow = {
+            ...row,
+            sender_name: senderName || 'Anggota',
+          };
+
+          const nextMessage = toMessage(rowWithSenderName, currentUser);
 
           setMessagesByWorkspace((prev) => {
             const currentMessages = prev[activeWorkspaceId]?.[activeRoomId] ?? [];
@@ -326,7 +356,7 @@ export default function WorkspacePage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [activeRoomId, activeWorkspaceId, currentUser]);
+  }, [activeRoomId, activeWorkspaceId, currentUser, membersByWorkspace]);
 
   useEffect(() => {
     if (!currentUserId) return undefined;
@@ -728,6 +758,7 @@ export default function WorkspacePage() {
       : undefined;
     const pendingMessage: Message = {
       id: tempMessageId,
+      senderId: currentUserId,
       user: currentUserName,
       avatar: currentUserAvatar,
       time: 'Mengirim...',
@@ -1670,6 +1701,7 @@ export default function WorkspacePage() {
         members={members}
         rooms={rooms}
         activeRoomId={activeRoomId}
+        canManageChannels={canManageWorkspace}
         onRoomChange={(roomId) => {
           setActiveRoomId(roomId);
           setDraftFile(null);
@@ -1708,6 +1740,7 @@ export default function WorkspacePage() {
           showFilePanel={showFilePanel}
           isSummarizing={isSummarizing}
           canSummarize={messages.length > 0}
+          canManageWorkspace={canManageWorkspace}
           onSearchChange={setSearchQuery}
           onInvite={() => {
             setInviteMessage('');
@@ -1741,6 +1774,7 @@ export default function WorkspacePage() {
           selectedFileMessage={selectedFileMessage}
           isDragging={isDragging}
           isSending={!!busyActions.sendMessage}
+          canManageChannels={canManageWorkspace}
           dragHandlers={dragHandlers}
           onClearSearch={() => {
             setSearchQuery('');
@@ -1795,6 +1829,7 @@ export default function WorkspacePage() {
           currentUserPhotoUrl={currentUserPhotoUrl}
           currentUserBio={currentUserBio}
           currentUserStatus={currentUserStatus}
+          canManageWorkspace={canManageWorkspace}
           busyActions={busyActions}
           onCloseWorkspaceSettings={() => setShowWorkspaceSettings(false)}
           onUpdateWorkspace={handleUpdateWorkspace}

@@ -80,7 +80,10 @@ router.post('/polish-message', requireAuth, asyncHandler(async (req, res) => {
 }));
 
 router.post('/summarize', requireAuth, asyncHandler(async (req, res) => {
-  const limit = Math.min(Number(req.body.limit || 50), 100);
+  const requestedLimit = Number(req.body.limit ?? 50);
+  const limit = Number.isFinite(requestedLimit)
+    ? Math.min(Math.max(Math.trunc(requestedLimit), 1), 100)
+    : 50;
   let normalizedMessages;
   let channel = null;
 

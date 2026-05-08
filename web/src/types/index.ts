@@ -27,6 +27,7 @@ export interface CurrentUser {
 
 export interface Message {
   id: number | string;
+  senderId?: string;
   user: string;
   avatar: string;
   time: string;
@@ -45,6 +46,7 @@ export interface Message {
   mimeType?: string;
   pinned?: boolean;
   edited?: boolean;
+  isGroupStart?: boolean;
   replyTo?: {
     user: string;
     preview: string;

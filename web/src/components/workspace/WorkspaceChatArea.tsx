@@ -28,6 +28,7 @@ interface WorkspaceChatAreaProps {
   selectedFileMessage: Message | null;
   isDragging: boolean;
   isSending?: boolean;
+  canManageChannels: boolean;
   dragHandlers: HTMLAttributes<HTMLDivElement>;
   onClearSearch: () => void;
   onOpenFilePanel: () => void;
@@ -67,6 +68,7 @@ export default function WorkspaceChatArea({
   selectedFileMessage,
   isDragging,
   isSending = false,
+  canManageChannels,
   dragHandlers,
   onClearSearch,
   onOpenFilePanel,
@@ -99,15 +101,19 @@ export default function WorkspaceChatArea({
               Belum ada ruang diskusi aktif
             </h3>
             <p className="mt-2 text-sm leading-6 text-gray-500">
-              Buat channel pertama agar tim bisa mulai mengirim pesan dan file.
+              {canManageChannels
+                ? 'Buat channel pertama agar tim bisa mulai mengirim pesan dan file.'
+                : 'Minta owner atau admin membuat channel agar tim bisa mulai berdiskusi.'}
             </p>
-            <button
-              type="button"
-              onClick={onCreateChannel}
-              className="mt-5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-blue-700"
-            >
-              Buat Channel
-            </button>
+            {canManageChannels && (
+              <button
+                type="button"
+                onClick={onCreateChannel}
+                className="mt-5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-blue-700"
+              >
+                Buat Channel
+              </button>
+            )}
           </div>
         </div>
       </div>
