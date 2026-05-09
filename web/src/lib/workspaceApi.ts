@@ -125,6 +125,10 @@ export interface InviteMemberResponse {
   member: BootstrapMemberRow;
 }
 
+export interface UpdateMemberRoleResponse {
+  member: BootstrapMemberRow;
+}
+
 export interface InviteActionResponse {
   invite: PendingInvitation;
   workspace?: WorkspaceRow;

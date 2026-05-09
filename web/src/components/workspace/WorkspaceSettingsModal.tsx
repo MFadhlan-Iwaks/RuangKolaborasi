@@ -11,6 +11,7 @@ import {
   LogOut,
   Palette,
   Settings,
+  UserMinus,
   Users,
   X,
 } from 'lucide-react';
@@ -32,11 +33,16 @@ interface WorkspaceSettingsModalProps {
   members: TeamMember[];
   canLeave: boolean;
   canManageWorkspace: boolean;
+  currentUserId: string;
+  currentWorkspaceRole?: TeamMember['role'];
   isSaving?: boolean;
   isLeaving?: boolean;
+  isManagingMember?: boolean;
   onClose: () => void;
   onUpdate: (updates: Pick<Workspace, 'name' | 'shortName' | 'description' | 'color' | 'photoUrl'>) => void;
   onLeave: () => void;
+  onUpdateMemberRole: (memberId: string, role: TeamMember['role']) => void;
+  onKickMember: (member: TeamMember) => void;
 }
 
 export default function WorkspaceSettingsModal({
@@ -44,11 +50,16 @@ export default function WorkspaceSettingsModal({
   members,
   canLeave,
   canManageWorkspace,
+  currentUserId,
+  currentWorkspaceRole,
   isSaving = false,
   isLeaving = false,
+  isManagingMember = false,
   onClose,
   onUpdate,
   onLeave,
+  onUpdateMemberRole,
+  onKickMember,
 }: WorkspaceSettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [name, setName] = useState(workspace.name);
@@ -98,6 +109,27 @@ export default function WorkspaceSettingsModal({
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1600);
     }
+  }
+
+  function canEditRole(member: TeamMember) {
+    return currentWorkspaceRole === 'Owner' &&
+      member.status === 'active' &&
+      member.id !== currentUserId &&
+      member.role !== 'Owner';
+  }
+
+  function canKickMember(member: TeamMember) {
+    if (
+      !canManageWorkspace ||
+      member.status !== 'active' ||
+      member.id === currentUserId ||
+      member.role === 'Owner'
+    ) {
+      return false;
+    }
+
+    if (currentWorkspaceRole === 'Owner') return true;
+    return currentWorkspaceRole === 'Admin' && member.role === 'Member';
   }
 
   return (
@@ -341,9 +373,40 @@ export default function WorkspaceSettingsModal({
                         {member.bio || member.email}
                       </p>
                     </div>
-                    <span className="rounded-full bg-gray-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-gray-500">
-                      {member.role}
-                    </span>
+                    <div className="flex shrink-0 items-center gap-2">
+                      {canEditRole(member) ? (
+                        <select
+                          value={member.role}
+                          disabled={isManagingMember}
+                          onChange={(event) =>
+                            onUpdateMemberRole(
+                              member.id,
+                              event.target.value as TeamMember['role']
+                            )
+                          }
+                          className="h-8 rounded-lg border border-gray-200 bg-white px-2 text-xs font-bold text-gray-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <option>Member</option>
+                          <option>Admin</option>
+                        </select>
+                      ) : (
+                        <span className="rounded-full bg-gray-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-gray-500">
+                          {member.role}
+                        </span>
+                      )}
+
+                      {canKickMember(member) && (
+                        <button
+                          type="button"
+                          onClick={() => onKickMember(member)}
+                          disabled={isManagingMember}
+                          title={`Keluarkan ${member.name}`}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-100 bg-red-50 text-red-600 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <UserMinus size={15} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

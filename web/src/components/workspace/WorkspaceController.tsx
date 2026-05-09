@@ -45,6 +45,7 @@ import {
   JoinWorkspaceResponse,
   MessageUserStateResponse,
   ReactionResponse,
+  UpdateMemberRoleResponse,
   UpdateProfileResponse,
   UpdateChannelResponse,
   UpdateWorkspaceResponse,
@@ -184,7 +185,12 @@ export default function WorkspacePage() {
     }
   }
 
-  async function loadWorkspaceData(currentUser: CurrentUser, accessToken: string) {
+  const loadWorkspaceData = useCallback(async (
+    currentUser: CurrentUser,
+    accessToken: string,
+    preferredWorkspaceId = '',
+    preferredRoomId = ''
+  ) => {
     const payload = await apiFetch<BootstrapResponse>('/api/workspaces/bootstrap', {
       accessToken,
     });
@@ -219,9 +225,19 @@ export default function WorkspacePage() {
       ...(payload.incomingInvites ?? []),
       ...(payload.outgoingInvites ?? []),
     ]);
-    setActiveWorkspaceId(nextWorkspaces[0]?.id ?? '');
-    setActiveRoomId(nextRoomsByWorkspace[nextWorkspaces[0]?.id ?? '']?.[0]?.id ?? '');
-  }
+    const nextActiveWorkspaceId =
+      preferredWorkspaceId && nextWorkspaces.some((workspace) => workspace.id === preferredWorkspaceId)
+        ? preferredWorkspaceId
+        : nextWorkspaces[0]?.id ?? '';
+    const nextWorkspaceRooms = nextRoomsByWorkspace[nextActiveWorkspaceId] ?? [];
+    const nextActiveRoomId =
+      preferredRoomId && nextWorkspaceRooms.some((room) => room.id === preferredRoomId)
+        ? preferredRoomId
+        : nextWorkspaceRooms[0]?.id ?? '';
+
+    setActiveWorkspaceId(nextActiveWorkspaceId);
+    setActiveRoomId(nextActiveRoomId);
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -295,7 +311,7 @@ export default function WorkspacePage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [loadWorkspaceData]);
 
   useEffect(() => {
     if (!activeRoomId || !activeWorkspaceId || !currentUser) return undefined;
@@ -580,7 +596,7 @@ export default function WorkspacePage() {
       }
       supabase.removeChannel(channel);
     };
-  }, [activeRoomId, activeWorkspaceId, currentUser, membersByWorkspace]);
+  }, [activeRoomId, activeWorkspaceId, currentUser, loadWorkspaceData, membersByWorkspace]);
 
   useEffect(() => {
     if (!currentUserId) return undefined;
@@ -673,6 +689,40 @@ export default function WorkspacePage() {
       supabase.removeChannel(channel);
     };
   }, [currentUserId]);
+
+  useEffect(() => {
+    if (!activeWorkspaceId || !currentUser) return undefined;
+
+    const supabase = getSupabaseBrowserClient();
+    const channel = supabase
+      .channel(`workspace-members:${activeWorkspaceId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'workspace_members',
+          filter: `workspace_id=eq.${activeWorkspaceId}`,
+        },
+        async () => {
+          try {
+            await loadWorkspaceData(
+              currentUser,
+              await getAccessToken(),
+              activeWorkspaceId,
+              activeRoomId
+            );
+          } catch (error) {
+            console.error('Gagal memuat ulang anggota workspace:', getReadableError(error), error);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeRoomId, activeWorkspaceId, currentUser, loadWorkspaceData]);
 
   const handleTypingChange = useCallback(
     (isTyping: boolean) => {
@@ -1678,6 +1728,78 @@ export default function WorkspacePage() {
     }
   }
 
+  async function handleUpdateMemberRole(memberId: string, role: TeamMember['role']) {
+    try {
+      setBusyActions((prev) => ({ ...prev, manageMember: true }));
+      const { member } = await apiFetch<UpdateMemberRoleResponse>(
+        `/api/workspaces/${activeWorkspaceId}/members/${memberId}/role`,
+        {
+          method: 'PATCH',
+          accessToken: await getAccessToken(),
+          body: JSON.stringify({ role }),
+        }
+      );
+      const nextMember = toMember(
+        member,
+        currentUser ?? {
+          id: currentUserId,
+          name: currentUserName,
+          email: currentUserEmail,
+          initial: currentUserInitial,
+          avatar: currentUserAvatar,
+          photoUrl: currentUserPhotoUrl,
+          bio: currentUserBio,
+          status: currentUserStatus,
+        }
+      );
+
+      setMembersByWorkspace((prev) => ({
+        ...prev,
+        [activeWorkspaceId]: (prev[activeWorkspaceId] ?? []).map((item) =>
+          item.id === memberId ? { ...item, ...nextMember } : item
+        ),
+      }));
+      showToast({
+        type: 'success',
+        title: 'Role anggota diperbarui',
+        description: `${nextMember.name} sekarang ${nextMember.role}`,
+      });
+    } catch (error) {
+      showActionError('Gagal mengubah role anggota', error);
+    } finally {
+      setBusyActions((prev) => ({ ...prev, manageMember: false }));
+    }
+  }
+
+  async function handleKickMember(member: TeamMember) {
+    const confirmed = window.confirm(`Keluarkan ${member.name} dari grup ini?`);
+    if (!confirmed) return;
+
+    try {
+      setBusyActions((prev) => ({ ...prev, manageMember: true }));
+      await apiFetch(`/api/workspaces/${activeWorkspaceId}/members/${member.id}`, {
+        method: 'DELETE',
+        accessToken: await getAccessToken(),
+      });
+
+      setMembersByWorkspace((prev) => ({
+        ...prev,
+        [activeWorkspaceId]: (prev[activeWorkspaceId] ?? []).filter(
+          (item) => item.id !== member.id
+        ),
+      }));
+      showToast({
+        type: 'success',
+        title: 'Anggota dikeluarkan',
+        description: member.name,
+      });
+    } catch (error) {
+      showActionError('Gagal mengeluarkan anggota', error);
+    } finally {
+      setBusyActions((prev) => ({ ...prev, manageMember: false }));
+    }
+  }
+
   async function handleLeaveWorkspace() {
     try {
       setBusyActions((prev) => ({ ...prev, leaveWorkspace: true }));
@@ -2319,10 +2441,14 @@ export default function WorkspacePage() {
           currentUserBio={currentUserBio}
           currentUserStatus={currentUserStatus}
           canManageWorkspace={canManageWorkspace}
+          currentUserId={currentUserId}
+          currentWorkspaceRole={currentWorkspaceRole}
           busyActions={busyActions}
           onCloseWorkspaceSettings={() => setShowWorkspaceSettings(false)}
           onUpdateWorkspace={handleUpdateWorkspace}
           onLeaveWorkspace={handleLeaveWorkspace}
+          onUpdateMemberRole={handleUpdateMemberRole}
+          onKickMember={handleKickMember}
           onCloseUserProfile={() => setShowUserProfile(false)}
           onSaveProfile={handleUpdateProfile}
           onCloseChannelSettings={() => setShowChannelSettings(false)}

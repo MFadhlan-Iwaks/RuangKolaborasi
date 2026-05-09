@@ -218,6 +218,36 @@ async function assertWorkspaceRole(workspaceId, userId, allowedRoles) {
   return member;
 }
 
+async function getWorkspaceMemberForManagement(workspaceId, userId) {
+  const { data, error } = await supabaseAdmin
+    .from('workspace_members')
+    .select('id, workspace_id, user_id, role, profiles:user_id(id, full_name, username, avatar_url, bio, status)')
+    .eq('workspace_id', workspaceId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error) {
+    error.status = 500;
+    throw error;
+  }
+
+  return data;
+}
+
+function mapWorkspaceMemberRow(member, currentUser = null) {
+  return {
+    id: member.user_id,
+    workspace_id: member.workspace_id,
+    role: member.role,
+    full_name: member.profiles?.username || member.profiles?.full_name || 'Anggota',
+    username: member.profiles?.username || null,
+    email: currentUser && member.user_id === currentUser.id ? currentUser.email : null,
+    avatar_url: member.profiles?.avatar_url || null,
+    bio: member.profiles?.bio || null,
+    profile_status: member.profiles?.status || 'online'
+  };
+}
+
 function normalizeRole(role) {
   const normalized = String(role || 'member').toLowerCase();
   return ['owner', 'admin', 'member'].includes(normalized) ? normalized : 'member';
@@ -243,6 +273,50 @@ function assertAssignableInviteRole(requesterRole, requestedRole) {
     const error = new Error('Only workspace owners can invite admins');
     error.status = 403;
     throw error;
+  }
+}
+
+function assertMemberManagementAllowed(requester, targetMember, action) {
+  if (!ADMIN_ROLES.includes(requester.role)) {
+    const error = new Error('Only owner or admin can manage members');
+    error.status = 403;
+    throw error;
+  }
+
+  if (!targetMember) {
+    const error = new Error('Member not found');
+    error.status = 404;
+    throw error;
+  }
+
+  if (targetMember.user_id === requester.user_id) {
+    const error = new Error('Gunakan menu keluar grup untuk mengelola akun sendiri.');
+    error.status = 400;
+    error.code = 'SELF_MEMBER_MANAGEMENT_NOT_ALLOWED';
+    throw error;
+  }
+
+  if (targetMember.role === 'owner') {
+    const error = new Error('Role owner tidak bisa diubah atau dikeluarkan.');
+    error.status = 403;
+    error.code = 'OWNER_PROTECTED';
+    throw error;
+  }
+
+  if (requester.role === 'admin') {
+    if (targetMember.role !== 'member') {
+      const error = new Error('Admin tidak bisa mengelola admin lain.');
+      error.status = 403;
+      error.code = 'ADMIN_PEER_MANAGEMENT_FORBIDDEN';
+      throw error;
+    }
+
+    if (action === 'role') {
+      const error = new Error('Hanya owner yang bisa mengubah role anggota.');
+      error.status = 403;
+      error.code = 'ONLY_OWNER_CAN_CHANGE_ROLE';
+      throw error;
+    }
   }
 }
 
@@ -715,17 +789,9 @@ async function buildBootstrapPayload(user) {
       throw membersError;
     }
 
-    membersByWorkspace[workspace.id] = (members || []).map((member) => ({
-      id: member.user_id,
-      workspace_id: member.workspace_id,
-      role: member.role,
-      full_name: member.profiles?.username || member.profiles?.full_name || 'Anggota',
-      username: member.profiles?.username || null,
-      email: member.user_id === user.id ? user.email : null,
-      avatar_url: member.profiles?.avatar_url || null,
-      bio: member.profiles?.bio || null,
-      profile_status: member.profiles?.status || 'online'
-    }));
+    membersByWorkspace[workspace.id] = (members || []).map((member) =>
+      mapWorkspaceMemberRow(member, user)
+    );
 
     const { data: channels, error: channelsError } = await supabaseAdmin
       .from('channels')
@@ -918,6 +984,73 @@ router.delete('/:workspaceId/leave', requireAuth, asyncHandler(async (req, res) 
   }
 
   return res.json({ action: 'left' });
+}));
+
+router.patch('/:workspaceId/members/:memberId/role', requireAuth, asyncHandler(async (req, res) => {
+  const workspaceId = req.params.workspaceId;
+  const memberId = req.params.memberId;
+  const role = toDbRole(req.body.role);
+
+  if (role === 'owner') {
+    return res.status(400).json({
+      code: 'OWNER_ROLE_NOT_ASSIGNABLE',
+      message: 'Role owner tidak bisa diberikan dari menu anggota.'
+    });
+  }
+
+  const requester = await assertWorkspaceMember(workspaceId, req.user.id);
+  requester.user_id = req.user.id;
+  const targetMember = await getWorkspaceMemberForManagement(workspaceId, memberId);
+  assertMemberManagementAllowed(requester, targetMember, 'role');
+
+  if (requester.role !== 'owner') {
+    return res.status(403).json({
+      code: 'ONLY_OWNER_CAN_CHANGE_ROLE',
+      message: 'Hanya owner yang bisa mengubah role anggota.'
+    });
+  }
+
+  const { data: updatedMember, error } = await supabaseAdmin
+    .from('workspace_members')
+    .update({ role })
+    .eq('workspace_id', workspaceId)
+    .eq('user_id', memberId)
+    .select('id, workspace_id, user_id, role, profiles:user_id(id, full_name, username, avatar_url, bio, status)')
+    .single();
+
+  if (error) {
+    error.status = 500;
+    throw error;
+  }
+
+  res.json({
+    member: mapWorkspaceMemberRow(updatedMember, req.user)
+  });
+}));
+
+router.delete('/:workspaceId/members/:memberId', requireAuth, asyncHandler(async (req, res) => {
+  const workspaceId = req.params.workspaceId;
+  const memberId = req.params.memberId;
+  const requester = await assertWorkspaceMember(workspaceId, req.user.id);
+  requester.user_id = req.user.id;
+  const targetMember = await getWorkspaceMemberForManagement(workspaceId, memberId);
+  assertMemberManagementAllowed(requester, targetMember, 'kick');
+
+  const { error } = await supabaseAdmin
+    .from('workspace_members')
+    .delete()
+    .eq('workspace_id', workspaceId)
+    .eq('user_id', memberId);
+
+  if (error) {
+    error.status = 500;
+    throw error;
+  }
+
+  res.json({
+    deleted: true,
+    memberId
+  });
 }));
 
 router.post('/:workspaceId/channels', requireAuth, asyncHandler(async (req, res) => {
