@@ -67,7 +67,8 @@ export function useWorkspaceViewState({
     const matchesFilter =
       messageFilter === 'all' ||
       (messageFilter === 'files' && message.type === 'file') ||
-      (messageFilter === 'pinned' && message.pinned);
+      (messageFilter === 'pinned' && message.pinned) ||
+      (messageFilter === 'starred' && message.starred);
 
     if (!matchesFilter) return false;
     if (!query) return true;

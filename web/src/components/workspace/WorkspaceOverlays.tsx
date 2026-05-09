@@ -42,10 +42,10 @@ interface WorkspaceOverlaysProps {
   canManageWorkspace: boolean;
   busyActions?: Record<string, boolean>;
   onCloseWorkspaceSettings: () => void;
-  onUpdateWorkspace: (updates: Pick<Workspace, 'name' | 'shortName' | 'description' | 'color'>) => void;
+  onUpdateWorkspace: (updates: Pick<Workspace, 'name' | 'shortName' | 'description' | 'color' | 'photoUrl'>) => void;
   onLeaveWorkspace: () => void;
   onCloseUserProfile: () => void;
-  onSaveProfile: (profile: { photoUrl?: string; bio: string }) => void;
+  onSaveProfile: (profile: { name: string; photoUrl?: string; bio: string }) => void;
   onCloseChannelSettings: () => void;
   onUpdateChannel: (updates: Pick<Room, 'name' | 'description' | 'favorite'>) => void;
   onArchiveToggle: () => void;
@@ -251,6 +251,9 @@ export default function WorkspaceOverlays({
         <SummaryModal
           isSummarizing={isSummarizing}
           summaryResult={summaryResult}
+          workspaceName={activeWorkspace.name}
+          roomName={activeRoom?.name}
+          messageCount={messages.length}
           onClose={onCloseSummary}
         />
       )}

@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useState, type ChangeEvent, type FormEvent } from 'react';
 import {
   AlertTriangle,
+  Camera,
   Check,
   Copy,
+  ImageOff,
   Loader2,
   LogOut,
   Palette,
@@ -33,7 +35,7 @@ interface WorkspaceSettingsModalProps {
   isSaving?: boolean;
   isLeaving?: boolean;
   onClose: () => void;
-  onUpdate: (updates: Pick<Workspace, 'name' | 'shortName' | 'description' | 'color'>) => void;
+  onUpdate: (updates: Pick<Workspace, 'name' | 'shortName' | 'description' | 'color' | 'photoUrl'>) => void;
   onLeave: () => void;
 }
 
@@ -53,6 +55,7 @@ export default function WorkspaceSettingsModal({
   const [shortName, setShortName] = useState(workspace.shortName);
   const [description, setDescription] = useState(workspace.description);
   const [color, setColor] = useState(workspace.color);
+  const [photoUrl, setPhotoUrl] = useState(workspace.photoUrl);
   const [copied, setCopied] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
   const descriptionLimit = 160;
@@ -71,7 +74,21 @@ export default function WorkspaceSettingsModal({
       shortName: shortName.trim().slice(0, 3).toUpperCase(),
       description: description.trim(),
       color,
+      photoUrl,
     });
+  }
+
+  function handlePhotoChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setPhotoUrl(String(reader.result || ''));
+    };
+    reader.readAsDataURL(file);
+    event.target.value = '';
   }
 
   async function handleCopyInviteCode() {
@@ -88,9 +105,18 @@ export default function WorkspaceSettingsModal({
       <div className="flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
           <div className="flex min-w-0 items-center gap-3">
-            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold text-white ${color}`}>
-              {shortName.slice(0, 3).toUpperCase()}
-            </div>
+            {photoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={photoUrl}
+                alt={name}
+                className="h-10 w-10 shrink-0 rounded-xl object-cover shadow-sm"
+              />
+            ) : (
+              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold text-white ${color}`}>
+                {shortName.slice(0, 3).toUpperCase()}
+              </div>
+            )}
             <div className="min-w-0">
               <h3 className="truncate text-base font-bold text-gray-900">
                 Pengaturan Grup
@@ -140,6 +166,58 @@ export default function WorkspaceSettingsModal({
               <div className="flex items-center gap-2 text-sm font-bold text-gray-900">
                 <Settings size={16} className="text-gray-400" />
                 Identitas Grup
+              </div>
+
+              <div className="flex flex-col gap-3 rounded-xl border border-gray-100 bg-gray-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 items-center gap-3">
+                  {photoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={photoUrl}
+                      alt={name}
+                      className="h-16 w-16 shrink-0 rounded-2xl object-cover shadow-sm"
+                    />
+                  ) : (
+                    <div className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl text-lg font-bold text-white shadow-sm ${color}`}>
+                      {shortName.slice(0, 3).toUpperCase()}
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-gray-900">
+                      Foto profil grup
+                    </p>
+                    <p className="mt-1 max-w-md text-xs leading-5 text-gray-500">
+                      Foto ini tampil di daftar grup dan header workspace web.
+                    </p>
+                  </div>
+                </div>
+
+                {canManageWorkspace && (
+                  <div className="flex shrink-0 flex-wrap gap-2">
+                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-blue-700">
+                      <Camera size={14} />
+                      Ganti Foto
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handlePhotoChange}
+                        disabled={isSaving}
+                        className="hidden"
+                      />
+                    </label>
+                    {photoUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setPhotoUrl(undefined)}
+                        disabled={isSaving}
+                        className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <ImageOff size={14} />
+                        Hapus
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
               <label className="block space-y-1.5">

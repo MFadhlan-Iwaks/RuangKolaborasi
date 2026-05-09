@@ -58,7 +58,16 @@ export default function WorkspaceSwitcher({
                     : `scale-95 border border-slate-200 ${workspace.color} text-white opacity-80 group-hover:scale-100 group-hover:opacity-100`
                 }`}
               >
-                {workspace.shortName}
+                {workspace.photoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={workspace.photoUrl}
+                    alt={workspace.name}
+                    className="h-full w-full rounded-xl object-cover"
+                  />
+                ) : (
+                  workspace.shortName
+                )}
               </span>
             </button>
           );

@@ -1,7 +1,7 @@
 'use client';
 
 import { ChangeEvent, useState } from 'react';
-import { Camera, X } from 'lucide-react';
+import { Camera, Maximize2, X } from 'lucide-react';
 import { Status } from '@/types';
 import { STATUS_CONFIG } from '@/components/ui/StatusMenu';
 
@@ -13,7 +13,7 @@ interface UserProfileModalProps {
   bio: string;
   status: Status;
   onClose: () => void;
-  onSave: (profile: { photoUrl?: string; bio: string }) => void;
+  onSave: (profile: { name: string; photoUrl?: string; bio: string }) => void;
 }
 
 export default function UserProfileModal({
@@ -28,8 +28,10 @@ export default function UserProfileModal({
 }: UserProfileModalProps) {
   const currentStatus = STATUS_CONFIG[status];
   const StatusIcon = currentStatus.icon;
+  const [draftName, setDraftName] = useState(name);
   const [draftPhotoUrl, setDraftPhotoUrl] = useState(photoUrl);
   const [draftBio, setDraftBio] = useState(bio);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const bioCharactersLeft = 120 - draftBio.length;
 
   function handlePhotoChange(event: ChangeEvent<HTMLInputElement>) {
@@ -46,7 +48,10 @@ export default function UserProfileModal({
   }
 
   function handleSave() {
+    if (!draftName.trim()) return;
+
     onSave({
+      name: draftName.trim(),
       photoUrl: draftPhotoUrl,
       bio: draftBio.trim() || 'Tidak ada bio.',
     });
@@ -55,7 +60,7 @@ export default function UserProfileModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl">
+      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
           <div>
             <h3 className="text-lg font-bold text-gray-900">Profil Pengguna</h3>
@@ -71,15 +76,25 @@ export default function UserProfileModal({
         </div>
 
         <div className="p-6">
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left">
             <div className="relative">
               {draftPhotoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={draftPhotoUrl}
-                  alt={name}
-                  className="h-20 w-20 rounded-full object-cover shadow-sm"
-                />
+                <button
+                  type="button"
+                  onClick={() => setPreviewOpen(true)}
+                  title="Lihat foto profil"
+                  className="group relative rounded-full focus:outline-none focus:ring-4 focus:ring-blue-100"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={draftPhotoUrl}
+                    alt={draftName}
+                    className="h-20 w-20 rounded-full object-cover shadow-sm"
+                  />
+                  <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/0 text-white opacity-0 transition-all group-hover:bg-black/35 group-hover:opacity-100">
+                    <Maximize2 size={18} />
+                  </span>
+                </button>
               ) : (
                 <div className="flex h-20 w-20 items-center justify-center rounded-full bg-indigo-600 text-xl font-black text-white shadow-sm">
                   {initial}
@@ -102,7 +117,7 @@ export default function UserProfileModal({
               </label>
             </div>
             <div className="min-w-0">
-              <h4 className="truncate text-xl font-black text-gray-900">{name}</h4>
+              <h4 className="truncate text-xl font-black text-gray-900">{draftName}</h4>
               <p className="mt-1 line-clamp-2 text-sm leading-5 text-gray-600">
                 {draftBio || 'Tidak ada bio.'}
               </p>
@@ -114,7 +129,21 @@ export default function UserProfileModal({
             </div>
           </div>
 
-          <div className="mt-6">
+          <div className="mt-6 space-y-4">
+            <label className="block space-y-2">
+              <span className="text-xs font-bold uppercase tracking-wide text-gray-400">
+                Nama pengguna
+              </span>
+              <input
+                value={draftName}
+                maxLength={40}
+                onChange={(event) => setDraftName(event.target.value)}
+                placeholder="Nama yang tampil di chat"
+                className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-800 outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
+              />
+            </label>
+
+            <div>
             <div className="mb-2 flex items-center justify-between">
               <label
                 htmlFor="profile-bio"
@@ -139,6 +168,7 @@ export default function UserProfileModal({
               placeholder="Tulis bio singkat..."
               className="w-full resize-none rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
             />
+            </div>
           </div>
         </div>
 
@@ -153,12 +183,35 @@ export default function UserProfileModal({
           <button
             type="button"
             onClick={handleSave}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-blue-700"
+            disabled={!draftName.trim()}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Simpan
           </button>
         </div>
       </div>
+      {previewOpen && draftPhotoUrl && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-gray-950/85 p-6 backdrop-blur-sm">
+          <button
+            type="button"
+            onClick={() => setPreviewOpen(false)}
+            className="absolute right-5 top-5 rounded-full bg-white/10 p-2 text-white transition-colors hover:bg-white/20"
+            title="Tutup preview"
+          >
+            <X size={22} />
+          </button>
+          <div className="max-w-xl text-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={draftPhotoUrl}
+              alt={draftName}
+              className="max-h-[78vh] max-w-full rounded-2xl object-contain shadow-2xl"
+            />
+            <p className="mt-4 text-sm font-bold text-white">{draftName}</p>
+            <p className="mt-1 text-xs text-white/60">{email}</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

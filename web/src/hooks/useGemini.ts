@@ -14,6 +14,22 @@ interface PolishResponse {
   polishedText: string;
 }
 
+function getSummaryContent(message: Message) {
+  if (message.deletedForEveryone) return '[Pesan sudah dihapus]';
+
+  const parts = [
+    message.text?.trim(),
+    message.replyTo
+      ? `Membalas ${message.replyTo.user}: "${message.replyTo.preview}"`
+      : '',
+    message.fileName
+      ? `Lampiran: ${message.fileName}${message.fileSize ? ` (${message.fileSize})` : ''}`
+      : '',
+  ].filter(Boolean);
+
+  return parts.join('\n') || '[Pesan tanpa teks]';
+}
+
 async function getAccessToken() {
   const supabase = getSupabaseBrowserClient();
   const { data, error } = await supabase.auth.getSession();
@@ -36,8 +52,22 @@ export function useGemini() {
   const [isPolishing, setIsPolishing] = useState(false);
   const [summaryResult, setSummaryResult] = useState('');
 
-  const summarize = async (messages: Message[]) => {
-    if (messages.length === 0) return;
+  const summarize = async (messages: Message[], channelId?: string) => {
+    if (messages.length === 0 && !channelId) return;
+    const readableMessages = messages
+      .filter((message) => !message.deletedForEveryone)
+      .slice(-100)
+      .map((message) => ({
+        senderName: message.user.replace(' (Kamu)', ''),
+        content: `[${message.time}] ${getSummaryContent(message)}`,
+        type: message.type,
+      }));
+
+    if (readableMessages.length === 0) {
+      setSummaryResult('Belum ada pesan yang bisa dirangkum.');
+      return;
+    }
+
     setIsSummarizing(true);
     setSummaryResult('');
 
@@ -46,13 +76,11 @@ export function useGemini() {
       const data = await apiFetch<SummarizeResponse>('/api/ai/summarize', {
         method: 'POST',
         accessToken,
-        body: JSON.stringify({
-          messages: messages.map((message) => ({
-            senderName: message.user,
-            content: message.text ?? `(Mengirim file: ${message.fileName ?? 'Lampiran'})`,
-            type: message.type,
-          })),
-        }),
+        body: JSON.stringify(
+          channelId
+            ? { channelId, limit: 100 }
+            : { messages: readableMessages }
+        ),
       });
 
       setSummaryResult(data.summary);

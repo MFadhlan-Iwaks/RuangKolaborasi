@@ -10,6 +10,7 @@ interface SidebarProps {
   workspaceName: string;
   workspaceInitials: string;
   workspaceColor: string;
+  workspacePhotoUrl?: string;
   currentUserName: string;
   currentUserInitial: string;
   currentUserPhotoUrl?: string;
@@ -31,6 +32,7 @@ export default function Sidebar({
   workspaceName,
   workspaceInitials,
   workspaceColor,
+  workspacePhotoUrl,
   currentUserName,
   currentUserInitial,
   currentUserPhotoUrl,
@@ -125,9 +127,18 @@ export default function Sidebar({
       {/* Header Workspace */}
       <div className="h-16 px-4 flex items-center justify-between border-b border-gray-200">
         <div className="flex items-center space-x-3">
-          <div className={`w-8 h-8 ${workspaceColor} text-white rounded-lg flex items-center justify-center font-bold text-sm shadow-sm`}>
-            {workspaceInitials}
-          </div>
+          {workspacePhotoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={workspacePhotoUrl}
+              alt={workspaceName}
+              className="h-8 w-8 shrink-0 rounded-lg object-cover shadow-sm"
+            />
+          ) : (
+            <div className={`w-8 h-8 ${workspaceColor} text-white rounded-lg flex items-center justify-center font-bold text-sm shadow-sm`}>
+              {workspaceInitials}
+            </div>
+          )}
           <div className="min-w-0 flex-1">
             <h1
               title={workspaceName}

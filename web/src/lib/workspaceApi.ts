@@ -26,6 +26,7 @@ export interface WorkspaceRow {
   short_name?: string | null;
   color?: string | null;
   invite_code?: string | null;
+  photo_url?: string | null;
 }
 
 export interface ChannelRow {
@@ -169,6 +170,7 @@ export function toWorkspace(row: WorkspaceRow, index: number): Workspace {
     description: row.description || 'Workspace kolaborasi tim.',
     color: row.color || WORKSPACE_COLORS[index % WORKSPACE_COLORS.length],
     inviteCode: row.invite_code || '',
+    photoUrl: row.photo_url || undefined,
   };
 }
 
