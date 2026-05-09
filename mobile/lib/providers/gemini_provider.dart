@@ -1,24 +1,11 @@
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/models/chat_models.dart';
 import '../data/services/gemini_service.dart';
-
-String _readGeminiApiKey() {
-  const dartDefineValue = String.fromEnvironment('GEMINI_API_KEY');
-  if (dartDefineValue.isNotEmpty) return dartDefineValue;
-
-  return dotenv.env['GEMINI_API_KEY'] ?? '';
-}
-
-String _readGeminiModel() {
-  const dartDefineValue = String.fromEnvironment('GEMINI_MODEL');
-  if (dartDefineValue.isNotEmpty) return dartDefineValue;
-
-  return dotenv.env['GEMINI_MODEL'] ?? '';
-}
+import 'auth_provider.dart';
 
 final geminiServiceProvider = Provider((ref) {
-  return GeminiService(apiKey: _readGeminiApiKey(), model: _readGeminiModel());
+  final authState = ref.watch(authProvider);
+  return GeminiService(accessToken: authState.currentUser?.accessToken ?? '');
 });
 
 class GeminiState {

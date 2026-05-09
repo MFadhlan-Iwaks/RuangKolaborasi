@@ -52,6 +52,7 @@ dependencies:
   record: ^6.2.0
   audioplayers: ^5.2.1
   path: ^1.9.1
+  supabase_flutter: ^2.8.1
 
 dev_dependencies:
   flutter_test:

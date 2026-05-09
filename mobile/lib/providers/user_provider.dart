@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/models/chat_models.dart';
+import '../data/services/backend_service.dart';
+import 'auth_provider.dart';
 
 class UserState {
   final String name;
@@ -30,10 +32,35 @@ class UserState {
 }
 
 class UserNotifier extends StateNotifier<UserState> {
-  UserNotifier()
-    : super(UserState(name: 'Tugas Besar PABP', status: UserStatus.online));
+  UserNotifier({
+    required String accessToken,
+    BackendService? backendService,
+  }) : _accessToken = accessToken,
+       _backendService = backendService ?? BackendService(),
+       super(UserState(name: 'Tugas Besar PABP', status: UserStatus.online));
 
-  void setStatus(UserStatus status) {
+  final BackendService _backendService;
+  final String _accessToken;
+
+  void setStatus(UserStatus status) async {
+    final oldStatus = state.status;
+    state = state.copyWith(status: status);
+
+    if (_accessToken.isNotEmpty) {
+      try {
+        await _backendService.updateStatus(
+          accessToken: _accessToken,
+          status: status.name,
+        );
+      } catch (e) {
+        // Rollback on error if needed, or just log
+        print('Gagal update status di server: $e');
+        state = state.copyWith(status: oldStatus);
+      }
+    }
+  }
+
+  void setAuthenticatedUserStatus(UserStatus status) {
     state = state.copyWith(status: status);
   }
 
@@ -58,5 +85,8 @@ class UserNotifier extends StateNotifier<UserState> {
 }
 
 final userProvider = StateNotifierProvider<UserNotifier, UserState>((ref) {
-  return UserNotifier();
+  final accessToken = ref.watch(
+    authProvider.select((state) => state.currentUser?.accessToken ?? ''),
+  );
+  return UserNotifier(accessToken: accessToken);
 });
