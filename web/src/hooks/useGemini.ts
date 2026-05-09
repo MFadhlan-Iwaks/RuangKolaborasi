@@ -52,8 +52,8 @@ export function useGemini() {
   const [isPolishing, setIsPolishing] = useState(false);
   const [summaryResult, setSummaryResult] = useState('');
 
-  const summarize = async (messages: Message[]) => {
-    if (messages.length === 0) return;
+  const summarize = async (messages: Message[], channelId?: string) => {
+    if (messages.length === 0 && !channelId) return;
     const readableMessages = messages
       .filter((message) => !message.deletedForEveryone)
       .slice(-100)
@@ -76,9 +76,11 @@ export function useGemini() {
       const data = await apiFetch<SummarizeResponse>('/api/ai/summarize', {
         method: 'POST',
         accessToken,
-        body: JSON.stringify({
-          messages: readableMessages,
-        }),
+        body: JSON.stringify(
+          channelId
+            ? { channelId, limit: 100 }
+            : { messages: readableMessages }
+        ),
       });
 
       setSummaryResult(data.summary);

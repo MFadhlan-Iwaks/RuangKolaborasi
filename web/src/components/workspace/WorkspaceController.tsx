@@ -1902,7 +1902,7 @@ export default function WorkspacePage() {
             setInviteMessage('');
             setShowInviteModal(true);
           }}
-          onSummarize={() => summarize(messages)}
+          onSummarize={() => summarize(messages, activeRoom?.id)}
           onToggleFilePanel={() => setShowFilePanel((current) => !current)}
           onOpenChannelSettings={() => setShowChannelSettings(true)}
           onOpenSettings={() => setShowWorkspaceSettings(true)}

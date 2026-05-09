@@ -88,6 +88,7 @@ Frontend web sekarang bisa preview dan download file. Backend perlu memastikan:
 - Metadata file tersimpan di database.
 - Signed URL atau public URL valid untuk preview/download.
 - CORS storage aman untuk fetch blob dari frontend.
+- URL file dapat diakses dengan `fetch(fileUrl)` dari browser karena web sekarang memaksa download melalui `fetch -> Blob -> anchor download`, bukan lagi membuka file di tab baru.
 
 Metadata file yang dibutuhkan:
 
@@ -155,12 +156,34 @@ Data notifikasi yang disarankan:
 
 ### 7. AI Summary
 
-Endpoint rangkuman AI sudah dipakai frontend. Agar lebih lengkap, backend perlu:
+Endpoint rangkuman AI sudah dipakai frontend. Web sekarang memanggil endpoint summary dengan `channelId`, sehingga backend perlu mengambil histori pesan channel dari database.
+
+Request dari frontend:
+
+```json
+{
+  "channelId": "id-channel-aktif",
+  "limit": 100
+}
+```
+
+Response yang dibutuhkan:
+
+```json
+{
+  "summary": "..."
+}
+```
+
+Backend perlu:
 
 - Menyimpan hasil summary.
 - Menyimpan siapa yang meminta summary.
 - Menyimpan channel dan workspace terkait.
 - Mengatur format prompt agar hasil mudah dibaca.
+- Memastikan `channelId` valid dan user yang request adalah member workspace/channel.
+- Memastikan pesan chat sudah persistent di tabel `messages`; jika pesan hanya ada di state frontend, AI summary dari `channelId` akan kosong.
+- Memastikan `GEMINI_API_KEY` terbaca dari `backend/.env`.
 
 Format rangkuman yang disarankan:
 
@@ -188,6 +211,16 @@ Backend perlu memastikan permission untuk fitur penting:
 - Owner/admin bisa invite anggota.
 - User hanya bisa edit/hapus pesan sendiri, kecuali aturan admin dibuat berbeda.
 - User hanya bisa keluar dari workspace yang ia ikuti.
+
+### 9. Register Flow Web
+
+Frontend web sekarang memakai flow berikut:
+
+- Setelah register berhasil, user diarahkan ke halaman login.
+- Jika Supabase otomatis membuat session setelah register, frontend akan menjalankan `signOut()` lebih dulu.
+- User tidak lagi langsung masuk ke workspace setelah register.
+
+Backend tidak perlu mengubah endpoint khusus untuk flow ini, tetapi error register tetap perlu dikirim dengan pesan yang jelas agar bisa ditampilkan oleh frontend.
 
 ## Kebutuhan untuk Mobile
 
@@ -307,4 +340,3 @@ Mobile sebaiknya mendukung:
 - Fitur spesifik platform tetap dipisahkan:
   - Web: drag and drop file.
   - Mobile: document scanner dan push notification native.
-
