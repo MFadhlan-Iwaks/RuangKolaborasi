@@ -15,6 +15,7 @@ export interface Database {
           full_name: string | null;
           username: string | null;
           avatar_url: string | null;
+          bio: string | null;
           status: 'online' | 'idle' | 'dnd' | 'offline';
           created_at: string;
           updated_at: string;
@@ -24,6 +25,7 @@ export interface Database {
           full_name?: string | null;
           username?: string | null;
           avatar_url?: string | null;
+          bio?: string | null;
           status?: 'online' | 'idle' | 'dnd' | 'offline';
           created_at?: string;
           updated_at?: string;
@@ -32,6 +34,7 @@ export interface Database {
           full_name?: string | null;
           username?: string | null;
           avatar_url?: string | null;
+          bio?: string | null;
           status?: 'online' | 'idle' | 'dnd' | 'offline';
           updated_at?: string;
         };
@@ -45,6 +48,7 @@ export interface Database {
           short_name: string | null;
           color: string | null;
           invite_code: string;
+          photo_url: string | null;
           owner_id: string;
           created_at: string;
           updated_at: string;
@@ -56,6 +60,7 @@ export interface Database {
           short_name?: string | null;
           color?: string | null;
           invite_code?: string;
+          photo_url?: string | null;
           owner_id: string;
           created_at?: string;
           updated_at?: string;
@@ -66,6 +71,7 @@ export interface Database {
           short_name?: string | null;
           color?: string | null;
           invite_code?: string;
+          photo_url?: string | null;
           updated_at?: string;
         };
         Relationships: [];
@@ -132,6 +138,10 @@ export interface Database {
           file_id: string | null;
           pinned: boolean;
           edited: boolean;
+          reply_to_message_id: string | null;
+          reply_snapshot: Json | null;
+          forwarded_from_message_id: string | null;
+          forwarded_snapshot: Json | null;
           created_at: string;
           updated_at: string;
         };
@@ -144,6 +154,10 @@ export interface Database {
           file_id?: string | null;
           pinned?: boolean;
           edited?: boolean;
+          reply_to_message_id?: string | null;
+          reply_snapshot?: Json | null;
+          forwarded_from_message_id?: string | null;
+          forwarded_snapshot?: Json | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -153,6 +167,51 @@ export interface Database {
           file_id?: string | null;
           pinned?: boolean;
           edited?: boolean;
+          reply_to_message_id?: string | null;
+          reply_snapshot?: Json | null;
+          forwarded_from_message_id?: string | null;
+          forwarded_snapshot?: Json | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      message_reactions: {
+        Row: {
+          message_id: string;
+          user_id: string;
+          emoji: string;
+          created_at: string;
+        };
+        Insert: {
+          message_id: string;
+          user_id: string;
+          emoji: string;
+          created_at?: string;
+        };
+        Update: {
+          emoji?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      message_user_states: {
+        Row: {
+          message_id: string;
+          user_id: string;
+          hidden: boolean;
+          starred: boolean;
+          updated_at: string;
+        };
+        Insert: {
+          message_id: string;
+          user_id: string;
+          hidden?: boolean;
+          starred?: boolean;
+          updated_at?: string;
+        };
+        Update: {
+          hidden?: boolean;
+          starred?: boolean;
           updated_at?: string;
         };
         Relationships: [];

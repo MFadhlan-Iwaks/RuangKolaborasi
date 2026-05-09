@@ -163,7 +163,9 @@ export default function MessageBubble({
   return (
     <div
       id={`message-${message.id}`}
-      className={`group flex px-3 py-1.5 sm:px-6 ${isMine ? 'justify-end' : 'justify-start'} ${
+      className={`group flex px-3 sm:px-6 ${
+        message.reactions?.length ? 'pb-4 pt-1.5' : 'py-1.5'
+      } ${isMine ? 'justify-end' : 'justify-start'} ${
         isSending ? 'opacity-75' : ''
       }`}
     >
@@ -173,11 +175,20 @@ export default function MessageBubble({
         }`}
       >
         {!isMine && message.isGroupStart !== false ? (
-          <div
-            className={`mb-1 hidden h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white shadow-sm sm:flex ${message.avatar}`}
-          >
-            {message.user.charAt(0)}
-          </div>
+          message.photoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={message.photoUrl}
+              alt={message.user}
+              className="mb-1 hidden h-8 w-8 shrink-0 rounded-full object-cover shadow-sm sm:block"
+            />
+          ) : (
+            <div
+              className={`mb-1 hidden h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white shadow-sm sm:flex ${message.avatar}`}
+            >
+              {message.user.charAt(0)}
+            </div>
+          )
         ) : (
           <div className="h-0 w-0 shrink-0 sm:h-8 sm:w-8" />
         )}
@@ -215,6 +226,19 @@ export default function MessageBubble({
               >
                 {message.replyTo.preview}
               </p>
+            </div>
+          )}
+
+          {message.forwardedFrom && (
+            <div
+              className={`mb-1.5 inline-flex max-w-full items-center gap-1.5 text-[11px] font-bold ${
+                isMine ? 'text-blue-50' : 'text-gray-500'
+              }`}
+            >
+              <Forward size={13} />
+              <span className="truncate">
+                Diteruskan dari {message.forwardedFrom.user}
+              </span>
             </div>
           )}
 
@@ -312,9 +336,7 @@ export default function MessageBubble({
 
           {message.reactions && message.reactions.length > 0 && (
             <div
-              className={`absolute -bottom-5 flex gap-1 rounded-full border border-gray-100 bg-white px-1.5 py-0.5 text-xs shadow-sm ${
-                isMine ? 'right-3' : 'left-3'
-              }`}
+              className="absolute bottom-0 left-3 z-10 flex translate-y-1/2 gap-1 rounded-full border border-gray-100 bg-white px-1.5 py-0.5 text-xs shadow-sm"
             >
               {message.reactions.map((reaction) => (
                 <button

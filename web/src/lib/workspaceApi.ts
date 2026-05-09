@@ -3,6 +3,7 @@
 import {
   CurrentUser,
   Message,
+  PendingInvitation,
   Room,
   Status,
   TeamMember,
@@ -46,11 +47,24 @@ export interface MessageRow {
   type: string;
   pinned?: boolean;
   edited?: boolean;
+  starred?: boolean;
+  reply_to_message_id?: string | null;
+  reply_snapshot?: {
+    user?: string | null;
+    preview?: string | null;
+  } | null;
+  forwarded_from_message_id?: string | null;
+  forwarded_snapshot?: {
+    user?: string | null;
+    preview?: string | null;
+  } | null;
+  reactions?: Message['reactions'];
   created_at: string;
 }
 
 export interface BootstrapMessageRow extends MessageRow {
   sender_name?: string | null;
+  sender_avatar_url?: string | null;
   file?: {
     id: string;
     file_name: string;
@@ -64,6 +78,7 @@ export interface BootstrapMemberRow {
   id: string;
   role: 'owner' | 'admin' | 'member';
   full_name: string;
+  username?: string | null;
   email: string | null;
   avatar_url: string | null;
   bio?: string | null;
@@ -75,6 +90,8 @@ export interface BootstrapResponse {
   roomsByWorkspace: Record<string, ChannelRow[]>;
   messagesByWorkspace: Record<string, Record<string, BootstrapMessageRow[]>>;
   membersByWorkspace: Record<string, BootstrapMemberRow[]>;
+  incomingInvites?: PendingInvitation[];
+  outgoingInvites?: PendingInvitation[];
 }
 
 export interface CreateWorkspaceResponse {
@@ -90,8 +107,39 @@ export interface CreateMessageResponse {
   message: BootstrapMessageRow;
 }
 
+export interface ReactionResponse {
+  messageId: string;
+  reactions: Message['reactions'];
+}
+
+export interface MessageUserStateResponse {
+  messageId: string;
+  state: {
+    hidden: boolean;
+    starred: boolean;
+  };
+}
+
 export interface InviteMemberResponse {
+  invite?: PendingInvitation;
   member: BootstrapMemberRow;
+}
+
+export interface InviteActionResponse {
+  invite: PendingInvitation;
+  workspace?: WorkspaceRow;
+  channel?: ChannelRow;
+}
+
+export interface UpdateProfileResponse {
+  profile: {
+    id: string;
+    full_name: string | null;
+    username: string | null;
+    avatar_url: string | null;
+    bio: string | null;
+    status?: Status | null;
+  };
 }
 
 export interface JoinWorkspaceResponse {
@@ -132,10 +180,10 @@ export function getDisplayName(options: {
       : '';
 
   return (
-    options.fullName ||
-    metadataName ||
     options.username ||
     metadataUsername ||
+    options.fullName ||
+    metadataName ||
     options.email?.split('@')[0] ||
     'Pengguna'
   );
@@ -197,6 +245,7 @@ export function toMessage(
     senderId: row.sender_id,
     user: isMine ? `${currentUser.name} (Kamu)` : row.sender_name || 'Anggota',
     avatar: isMine ? currentUser.avatar : 'bg-slate-500',
+    photoUrl: isMine ? currentUser.photoUrl : row.sender_avatar_url || undefined,
     isMine,
     time: createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     type: row.type === 'file' || row.type === 'image' ? 'file' : 'text',
@@ -209,6 +258,20 @@ export function toMessage(
     mimeType: row.file?.mime_type || undefined,
     pinned: !!row.pinned,
     edited: !!row.edited,
+    starred: !!row.starred,
+    replyTo: row.reply_snapshot
+      ? {
+          user: row.reply_snapshot.user || 'Anggota',
+          preview: row.reply_snapshot.preview || 'Lampiran',
+        }
+      : undefined,
+    forwardedFrom: row.forwarded_snapshot
+      ? {
+          user: row.forwarded_snapshot.user || 'Anggota',
+          preview: row.forwarded_snapshot.preview || 'Lampiran',
+        }
+      : undefined,
+    reactions: row.reactions ?? [],
   };
 }
 
@@ -220,7 +283,7 @@ export function toMember(
 
   return {
     id: row.id,
-    name: isMine ? currentUser.name : row.full_name || 'Anggota',
+    name: isMine ? currentUser.name : row.username || row.full_name || 'Anggota',
     email: isMine ? currentUser.email : row.email || 'anggota@workspace.local',
     role:
       row.role === 'owner' ? 'Owner' : row.role === 'admin' ? 'Admin' : 'Member',

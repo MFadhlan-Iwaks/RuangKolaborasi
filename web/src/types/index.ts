@@ -31,6 +31,7 @@ export interface Message {
   senderId?: string;
   user: string;
   avatar: string;
+  photoUrl?: string;
   time: string;
   type: MessageType;
   isMine?: boolean;
@@ -51,6 +52,10 @@ export interface Message {
   edited?: boolean;
   isGroupStart?: boolean;
   replyTo?: {
+    user: string;
+    preview: string;
+  };
+  forwardedFrom?: {
     user: string;
     preview: string;
   };

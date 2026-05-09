@@ -25,6 +25,7 @@ interface ChatInputProps {
   activeRoom: string;
   draftFile: File | null;
   onDraftFileChange: (file: File | null) => void;
+  onTypingChange?: (isTyping: boolean) => void;
   replyTo: Message | null;
   editingMessage?: Message | null;
   onCancelReply: () => void;
@@ -40,6 +41,7 @@ export default function ChatInput({
   activeRoom,
   draftFile,
   onDraftFileChange,
+  onTypingChange,
   replyTo,
   editingMessage,
   onCancelReply,
@@ -90,6 +92,13 @@ export default function ChatInput({
     onDraftFileChange(file);
   }
 
+  function handleInputChange(value: string) {
+    setInputText(value);
+
+    if (editingMessage || disabled || isSending) return;
+    onTypingChange?.(!!value.trim());
+  }
+
   const handleSend = async (e: FormEvent) => {
     e.preventDefault();
     if (editingMessage) {
@@ -99,6 +108,7 @@ export default function ChatInput({
     }
 
     if ((!inputText.trim() && !draftFile) || isSending || disabled) return;
+    onTypingChange?.(false);
     onSendMessage(inputText.trim(), draftFile ?? undefined);
     setInputText('');
     onDraftFileChange(null);
@@ -377,7 +387,8 @@ export default function ChatInput({
 
           <textarea
             value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
+            onChange={(e) => handleInputChange(e.target.value)}
+            onBlur={() => onTypingChange?.(false)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && (!e.shiftKey || e.ctrlKey || e.metaKey)) {
                 e.preventDefault();

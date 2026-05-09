@@ -44,6 +44,7 @@ interface WorkspaceChatAreaProps {
   onSendMessage: (text: string, file?: File) => void;
   onSaveEditMessage: (message: Message, text: string) => void;
   onDraftFileChange: (file: File | null) => void;
+  onTypingChange: (isTyping: boolean) => void;
   onCancelReply: () => void;
   onCancelEdit: () => void;
   onReply: (message: Message) => void;
@@ -97,6 +98,7 @@ export default function WorkspaceChatArea({
   onSendMessage,
   onSaveEditMessage,
   onDraftFileChange,
+  onTypingChange,
   onCancelReply,
   onCancelEdit,
   onReply,
@@ -241,6 +243,7 @@ export default function WorkspaceChatArea({
             activeRoom={activeRoom?.name ?? 'channel ini'}
             draftFile={draftFile}
             onDraftFileChange={onDraftFileChange}
+            onTypingChange={onTypingChange}
             replyTo={replyToMessage}
             editingMessage={editingMessage}
             onCancelReply={onCancelReply}

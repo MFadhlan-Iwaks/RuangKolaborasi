@@ -22,6 +22,9 @@ function getSummaryContent(message: Message) {
     message.replyTo
       ? `Membalas ${message.replyTo.user}: "${message.replyTo.preview}"`
       : '',
+    message.forwardedFrom
+      ? `Diteruskan dari ${message.forwardedFrom.user}: "${message.forwardedFrom.preview}"`
+      : '',
     message.fileName
       ? `Lampiran: ${message.fileName}${message.fileSize ? ` (${message.fileSize})` : ''}`
       : '',

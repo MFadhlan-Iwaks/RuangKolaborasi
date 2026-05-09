@@ -79,6 +79,8 @@ export function useWorkspaceViewState({
       message.fileName,
       message.replyTo?.user,
       message.replyTo?.preview,
+      message.forwardedFrom?.user,
+      message.forwardedFrom?.preview,
     ]
       .filter(Boolean)
       .some((value) => value?.toLowerCase().includes(query));

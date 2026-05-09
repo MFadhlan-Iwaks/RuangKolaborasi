@@ -13,7 +13,7 @@ interface UserProfileModalProps {
   bio: string;
   status: Status;
   onClose: () => void;
-  onSave: (profile: { name: string; photoUrl?: string; bio: string }) => void;
+  onSave: (profile: { username: string; photoUrl?: string; bio: string }) => void;
 }
 
 export default function UserProfileModal({
@@ -28,11 +28,12 @@ export default function UserProfileModal({
 }: UserProfileModalProps) {
   const currentStatus = STATUS_CONFIG[status];
   const StatusIcon = currentStatus.icon;
-  const [draftName, setDraftName] = useState(name);
+  const [draftUsername, setDraftUsername] = useState(name);
   const [draftPhotoUrl, setDraftPhotoUrl] = useState(photoUrl);
   const [draftBio, setDraftBio] = useState(bio);
   const [previewOpen, setPreviewOpen] = useState(false);
   const bioCharactersLeft = 120 - draftBio.length;
+  const usernameIsValid = /^[a-zA-Z0-9._-]{3,40}$/.test(draftUsername.trim());
 
   function handlePhotoChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -48,10 +49,10 @@ export default function UserProfileModal({
   }
 
   function handleSave() {
-    if (!draftName.trim()) return;
+    if (!usernameIsValid) return;
 
     onSave({
-      name: draftName.trim(),
+      username: draftUsername.trim(),
       photoUrl: draftPhotoUrl,
       bio: draftBio.trim() || 'Tidak ada bio.',
     });
@@ -88,7 +89,7 @@ export default function UserProfileModal({
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={draftPhotoUrl}
-                    alt={draftName}
+                    alt={draftUsername}
                     className="h-20 w-20 rounded-full object-cover shadow-sm"
                   />
                   <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/0 text-white opacity-0 transition-all group-hover:bg-black/35 group-hover:opacity-100">
@@ -117,7 +118,7 @@ export default function UserProfileModal({
               </label>
             </div>
             <div className="min-w-0">
-              <h4 className="truncate text-xl font-black text-gray-900">{draftName}</h4>
+              <h4 className="truncate text-xl font-black text-gray-900">{draftUsername}</h4>
               <p className="mt-1 line-clamp-2 text-sm leading-5 text-gray-600">
                 {draftBio || 'Tidak ada bio.'}
               </p>
@@ -132,15 +133,18 @@ export default function UserProfileModal({
           <div className="mt-6 space-y-4">
             <label className="block space-y-2">
               <span className="text-xs font-bold uppercase tracking-wide text-gray-400">
-                Nama pengguna
+                Username
               </span>
               <input
-                value={draftName}
+                value={draftUsername}
                 maxLength={40}
-                onChange={(event) => setDraftName(event.target.value)}
-                placeholder="Nama yang tampil di chat"
+                onChange={(event) => setDraftUsername(event.target.value)}
+                placeholder="Username yang tampil di chat"
                 className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-800 outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
               />
+              <span className="text-[11px] font-medium text-gray-400">
+                3-40 karakter: huruf, angka, titik, underscore, atau strip.
+              </span>
             </label>
 
             <div>
@@ -183,7 +187,7 @@ export default function UserProfileModal({
           <button
             type="button"
             onClick={handleSave}
-            disabled={!draftName.trim()}
+            disabled={!usernameIsValid}
             className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Simpan
@@ -204,10 +208,10 @@ export default function UserProfileModal({
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={draftPhotoUrl}
-              alt={draftName}
+              alt={draftUsername}
               className="max-h-[78vh] max-w-full rounded-2xl object-contain shadow-2xl"
             />
-            <p className="mt-4 text-sm font-bold text-white">{draftName}</p>
+            <p className="mt-4 text-sm font-bold text-white">{draftUsername}</p>
             <p className="mt-1 text-xs text-white/60">{email}</p>
           </div>
         </div>

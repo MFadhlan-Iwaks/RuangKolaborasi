@@ -39,6 +39,7 @@ function createApp() {
 
     res.status(err.status || 500).json({
       error: err.name || 'Internal Server Error',
+      code: err.code,
       message: env.nodeEnv === 'production' ? 'Unexpected server error' : err.message
     });
   });

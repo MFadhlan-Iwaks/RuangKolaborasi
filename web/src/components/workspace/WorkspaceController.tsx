@@ -1,7 +1,8 @@
 // src/components/workspace/WorkspaceController.tsx
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import {
   CurrentUser,
   ChatBackground,
@@ -39,11 +40,14 @@ import {
   CreateChannelResponse,
   CreateMessageResponse,
   CreateWorkspaceResponse,
+  InviteActionResponse,
   InviteMemberResponse,
   JoinWorkspaceResponse,
+  MessageUserStateResponse,
+  ReactionResponse,
+  UpdateProfileResponse,
   UpdateChannelResponse,
   UpdateWorkspaceResponse,
-  WORKSPACE_COLORS,
   ensureProfile,
   getAccessToken,
   getDisplayName,
@@ -105,6 +109,10 @@ export default function WorkspacePage() {
   const retryPayloadsRef = useRef<
     Record<string, { text: string; file?: File }>
   >({});
+  const typingChannelRef = useRef<RealtimeChannel | null>(null);
+  const typingStopTimeoutRef = useRef<number | null>(null);
+  const lastTypingSentRef = useRef({ roomId: '', at: 0, isTyping: false });
+  const messagesByWorkspaceRef = useRef(messagesByWorkspace);
 
   const { summarize, isSummarizing, summaryResult, clearSummary } = useGemini();
   const { isDragging, dragHandlers } = useDragDrop({ onFileDrop: handleFileDrop });
@@ -124,7 +132,6 @@ export default function WorkspacePage() {
     members,
     activeRoom,
     messages,
-    typingMemberName,
     pinnedMessages,
     channelFiles,
     filteredChannelFiles,
@@ -208,6 +215,10 @@ export default function WorkspacePage() {
     setRoomsByWorkspace(nextRoomsByWorkspace);
     setMessagesByWorkspace(nextMessagesByWorkspace);
     setMembersByWorkspace(nextMembersByWorkspace);
+    setIncomingInvites([
+      ...(payload.incomingInvites ?? []),
+      ...(payload.outgoingInvites ?? []),
+    ]);
     setActiveWorkspaceId(nextWorkspaces[0]?.id ?? '');
     setActiveRoomId(nextRoomsByWorkspace[nextWorkspaces[0]?.id ?? '']?.[0]?.id ?? '');
   }
@@ -232,7 +243,7 @@ export default function WorkspacePage() {
 
         const { data: profile } = await supabase
           .from('profiles')
-          .select('full_name, username, avatar_url, status')
+          .select('full_name, username, avatar_url, bio, status')
           .eq('id', user.id)
           .maybeSingle();
 
@@ -250,9 +261,10 @@ export default function WorkspacePage() {
           avatar: 'bg-indigo-600',
           photoUrl: profile?.avatar_url || undefined,
           bio:
-            typeof user.user_metadata?.bio === 'string'
+            profile?.bio ||
+            (typeof user.user_metadata?.bio === 'string'
               ? user.user_metadata.bio
-              : 'Fokus diskusi tim dan siap bantu progres tugas.',
+              : 'Fokus diskusi tim dan siap bantu progres tugas.'),
           status: (profile?.status as Status | null) || 'online',
         };
 
@@ -315,11 +327,12 @@ export default function WorkspacePage() {
             (member) => member.id === row.sender_id
           );
           let senderName = row.sender_name || senderMember?.name;
+          let senderAvatarUrl = row.sender_avatar_url || senderMember?.photoUrl;
 
-          if (!senderName && row.sender_id !== currentUser.id) {
+          if ((!senderName || !senderAvatarUrl) && row.sender_id !== currentUser.id) {
             const { data: profile, error } = await supabase
               .from('profiles')
-              .select('full_name, username')
+              .select('full_name, username, avatar_url')
               .eq('id', row.sender_id)
               .maybeSingle();
 
@@ -330,12 +343,14 @@ export default function WorkspacePage() {
                 fullName: profile?.full_name,
                 username: profile?.username,
               });
+              senderAvatarUrl = profile?.avatar_url || undefined;
             }
           }
 
           const rowWithSenderName: BootstrapMessageRow = {
             ...row,
             sender_name: senderName || 'Anggota',
+            sender_avatar_url: senderAvatarUrl || null,
           };
 
           const nextMessage = toMessage(rowWithSenderName, currentUser);
@@ -357,9 +372,212 @@ export default function WorkspacePage() {
           });
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'messages',
+          filter: `channel_id=eq.${activeRoomId}`,
+        },
+        (payload) => {
+          const row = payload.new as BootstrapMessageRow;
+
+          setMessagesByWorkspace((prev) => ({
+            ...prev,
+            [activeWorkspaceId]: {
+              ...(prev[activeWorkspaceId] ?? {}),
+              [activeRoomId]: (prev[activeWorkspaceId]?.[activeRoomId] ?? []).map((message) =>
+                message.id === row.id
+                  ? {
+                      ...message,
+                      text: row.content || undefined,
+                      pinned: !!row.pinned,
+                      edited: !!row.edited,
+                    }
+                  : message
+              ),
+            },
+          }));
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'messages',
+          filter: `channel_id=eq.${activeRoomId}`,
+        },
+        (payload) => {
+          const row = payload.old as { id?: string };
+
+          if (!row.id) return;
+
+          setMessagesByWorkspace((prev) => ({
+            ...prev,
+            [activeWorkspaceId]: {
+              ...(prev[activeWorkspaceId] ?? {}),
+              [activeRoomId]: (prev[activeWorkspaceId]?.[activeRoomId] ?? []).filter(
+                (message) => message.id !== row.id
+              ),
+            },
+          }));
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'message_reactions',
+        },
+        async (payload) => {
+          const changedMessageId =
+            (payload.new as { message_id?: string } | null)?.message_id ||
+            (payload.old as { message_id?: string } | null)?.message_id;
+
+          if (
+            !changedMessageId ||
+            !(
+              messagesByWorkspaceRef.current[activeWorkspaceId]?.[activeRoomId] ?? []
+            ).some(
+              (message) => message.id === changedMessageId
+            )
+          ) {
+            return;
+          }
+
+          try {
+            const { data, error } = await supabase
+              .from('message_reactions')
+              .select('emoji, user_id')
+              .eq('message_id', changedMessageId);
+
+            if (error) throw error;
+
+            const grouped = new Map<
+              string,
+              { emoji: string; count: number; reacted: boolean }
+            >();
+
+            for (const reaction of data ?? []) {
+              const currentReaction = grouped.get(reaction.emoji) ?? {
+                emoji: reaction.emoji,
+                count: 0,
+                reacted: false,
+              };
+
+              currentReaction.count += 1;
+              if (reaction.user_id === currentUser.id) {
+                currentReaction.reacted = true;
+              }
+              grouped.set(reaction.emoji, currentReaction);
+            }
+
+            setMessagesByWorkspace((prev) => ({
+              ...prev,
+              [activeWorkspaceId]: {
+                ...(prev[activeWorkspaceId] ?? {}),
+                [activeRoomId]: (prev[activeWorkspaceId]?.[activeRoomId] ?? []).map(
+                  (message) =>
+                    message.id === changedMessageId
+                      ? { ...message, reactions: [...grouped.values()] }
+                      : message
+                ),
+              },
+            }));
+          } catch (error) {
+            console.error('Gagal memuat ulang reaction:', getReadableError(error), error);
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'message_user_states',
+        },
+        (payload) => {
+          const state = (payload.new || payload.old) as {
+            message_id?: string;
+            user_id?: string;
+            hidden?: boolean;
+            starred?: boolean;
+          } | null;
+
+          if (!state?.message_id || state.user_id !== currentUser.id) return;
+
+          setMessagesByWorkspace((prev) => {
+            const currentMessages = prev[activeWorkspaceId]?.[activeRoomId] ?? [];
+            const targetExists = currentMessages.some(
+              (message) => message.id === state.message_id
+            );
+
+            if (!targetExists) return prev;
+
+            return {
+              ...prev,
+              [activeWorkspaceId]: {
+                ...(prev[activeWorkspaceId] ?? {}),
+                [activeRoomId]: state.hidden
+                  ? currentMessages.filter((message) => message.id !== state.message_id)
+                  : currentMessages.map((message) =>
+                      message.id === state.message_id
+                        ? { ...message, starred: !!state.starred }
+                        : message
+                    ),
+              },
+            };
+          });
+        }
+      )
+      .on('broadcast', { event: 'typing' }, ({ payload }) => {
+        const typingPayload = payload as {
+          roomId?: string;
+          userId?: string;
+          userName?: string;
+          isTyping?: boolean;
+        };
+
+        if (
+          typingPayload.roomId !== activeRoomId ||
+          !typingPayload.userId ||
+          typingPayload.userId === currentUser.id
+        ) {
+          return;
+        }
+
+        if (typingStopTimeoutRef.current) {
+          window.clearTimeout(typingStopTimeoutRef.current);
+          typingStopTimeoutRef.current = null;
+        }
+
+        if (!typingPayload.isTyping) {
+          setTypingUser((current) =>
+            current === typingPayload.userName ? '' : current
+          );
+          return;
+        }
+
+        setTypingUser(typingPayload.userName || 'Anggota');
+        typingStopTimeoutRef.current = window.setTimeout(() => {
+          setTypingUser('');
+          typingStopTimeoutRef.current = null;
+        }, 2500);
+      })
       .subscribe();
 
+    typingChannelRef.current = channel;
+
     return () => {
+      typingChannelRef.current = null;
+      setTypingUser('');
+      if (typingStopTimeoutRef.current) {
+        window.clearTimeout(typingStopTimeoutRef.current);
+        typingStopTimeoutRef.current = null;
+      }
       supabase.removeChannel(channel);
     };
   }, [activeRoomId, activeWorkspaceId, currentUser, membersByWorkspace]);
@@ -378,13 +596,29 @@ export default function WorkspacePage() {
           table: 'profiles',
         },
         (payload) => {
-          const profile = payload.new as { id?: string; status?: Status };
+          const profile = payload.new as {
+            id?: string;
+            full_name?: string | null;
+            username?: string | null;
+            avatar_url?: string | null;
+            status?: Status;
+          };
 
-          if (!profile.id || !profile.status) return;
+          if (!profile.id) return;
+          const displayName = profile.username || profile.full_name || 'Anggota';
+          const initial = makeInitials(displayName).slice(0, 2) || 'U';
 
           if (profile.id === currentUserId) {
             setCurrentUser((prev) =>
-              prev ? { ...prev, status: profile.status as Status } : prev
+              prev
+                ? {
+                    ...prev,
+                    name: displayName,
+                    initial,
+                    photoUrl: profile.avatar_url || undefined,
+                    status: (profile.status as Status | undefined) || prev.status,
+                  }
+                : prev
             );
           }
 
@@ -394,8 +628,39 @@ export default function WorkspacePage() {
                 workspaceId,
                 workspaceMembers.map((member) =>
                   member.id === profile.id
-                    ? { ...member, profileStatus: profile.status }
+                    ? {
+                        ...member,
+                        name: displayName,
+                        photoUrl: profile.avatar_url || undefined,
+                        profileStatus:
+                          (profile.status as Status | undefined) ||
+                          member.profileStatus,
+                      }
                     : member
+                ),
+              ])
+            )
+          );
+          setMessagesByWorkspace((prev) =>
+            Object.fromEntries(
+              Object.entries(prev).map(([workspaceId, workspaceMessages]) => [
+                workspaceId,
+                Object.fromEntries(
+                  Object.entries(workspaceMessages).map(([roomId, roomMessages]) => [
+                    roomId,
+                    roomMessages.map((message) =>
+                      message.senderId === profile.id
+                        ? {
+                            ...message,
+                            user:
+                              profile.id === currentUserId
+                                ? `${displayName} (Kamu)`
+                                : displayName,
+                            photoUrl: profile.avatar_url || undefined,
+                          }
+                        : message
+                    ),
+                  ])
                 ),
               ])
             )
@@ -409,18 +674,39 @@ export default function WorkspacePage() {
     };
   }, [currentUserId]);
 
-  useEffect(() => {
-    const startTimeout = window.setTimeout(
-      () => setTypingUser(typingMemberName && activeRoomId ? typingMemberName : ''),
-      0
-    );
-    const stopTimeout = window.setTimeout(() => setTypingUser(''), 1800);
+  const handleTypingChange = useCallback(
+    (isTyping: boolean) => {
+      if (!currentUser || !activeRoomId) return;
 
-    return () => {
-      window.clearTimeout(startTimeout);
-      window.clearTimeout(stopTimeout);
-    };
-  }, [activeWorkspaceId, activeRoomId, typingMemberName]);
+      const now = Date.now();
+      const lastTypingSent = lastTypingSentRef.current;
+      const isDuplicateStart =
+        isTyping &&
+        lastTypingSent.isTyping &&
+        lastTypingSent.roomId === activeRoomId &&
+        now - lastTypingSent.at < 1200;
+
+      if (isDuplicateStart) return;
+
+      lastTypingSentRef.current = {
+        roomId: activeRoomId,
+        at: now,
+        isTyping,
+      };
+
+      void typingChannelRef.current?.send({
+        type: 'broadcast',
+        event: 'typing',
+        payload: {
+          roomId: activeRoomId,
+          userId: currentUser.id,
+          userName: currentUser.name,
+          isTyping,
+        },
+      });
+    },
+    [activeRoomId, currentUser]
+  );
 
   useEffect(() => {
     function handleWorkspaceShortcuts(event: KeyboardEvent) {
@@ -557,175 +843,162 @@ export default function WorkspacePage() {
     }
   }
 
-  function handleUpdateProfile(profile: { name: string; photoUrl?: string; bio: string }) {
-    const nextInitial = makeInitials(profile.name).slice(0, 2) || currentUserInitial;
+  async function handleUpdateProfile(profile: { username: string; photoUrl?: string; bio: string }) {
+    try {
+      const { profile: savedProfile } = await apiFetch<UpdateProfileResponse>('/api/auth/profile', {
+        method: 'PATCH',
+        accessToken: await getAccessToken(),
+        body: JSON.stringify({
+          username: profile.username,
+          avatarUrl: profile.photoUrl,
+          bio: profile.bio,
+        }),
+      });
+      const savedName = savedProfile.username || savedProfile.full_name || profile.username;
+      const savedPhotoUrl = savedProfile.avatar_url || undefined;
+      const savedBio = savedProfile.bio || profile.bio;
+      const nextInitial = makeInitials(savedName).slice(0, 2) || currentUserInitial;
 
-    setCurrentUser((prev) =>
-      prev
-        ? {
-            ...prev,
-            name: profile.name,
-            initial: nextInitial,
-            photoUrl: profile.photoUrl,
-            bio: profile.bio,
-          }
-        : prev
-    );
-    setMembersByWorkspace((prev) =>
-      Object.fromEntries(
-        Object.entries(prev).map(([workspaceId, workspaceMembers]) => [
-          workspaceId,
-          workspaceMembers.map((member) =>
-            member.id === currentUserId
-              ? {
-                  ...member,
-                  name: profile.name,
-                  avatar: currentUserAvatar,
-                  bio: profile.bio,
-                  photoUrl: profile.photoUrl,
-                }
-              : member
-          ),
-        ])
-      )
-    );
-    updateCurrentRoomMessages((currentMessages) =>
-      currentMessages.map((message) =>
-        message.senderId === currentUserId || message.isMine
-          ? { ...message, user: `${profile.name} (Kamu)` }
-          : message
-      )
-    );
-    showToast({
-      type: 'success',
-      title: 'Profil diperbarui',
-      description: profile.name,
-    });
+      setCurrentUser((prev) =>
+        prev
+          ? {
+              ...prev,
+              name: savedName,
+              initial: nextInitial,
+              photoUrl: savedPhotoUrl,
+              bio: savedBio,
+            }
+          : prev
+      );
+      setMembersByWorkspace((prev) =>
+        Object.fromEntries(
+          Object.entries(prev).map(([workspaceId, workspaceMembers]) => [
+            workspaceId,
+            workspaceMembers.map((member) =>
+              member.id === currentUserId
+                ? {
+                    ...member,
+                    name: savedName,
+                    avatar: currentUserAvatar,
+                    bio: savedBio,
+                    photoUrl: savedPhotoUrl,
+                  }
+                : member
+            ),
+          ])
+        )
+      );
+      updateCurrentRoomMessages((currentMessages) =>
+        currentMessages.map((message) =>
+          message.senderId === currentUserId || message.isMine
+            ? { ...message, user: `${savedName} (Kamu)`, photoUrl: savedPhotoUrl }
+            : message
+        )
+      );
+      showToast({
+        type: 'success',
+        title: 'Profil diperbarui',
+        description: savedName,
+      });
+    } catch (error) {
+      showActionError('Gagal memperbarui profil', error);
+    }
   }
 
-  function handleAcceptInvite(notification: NotificationItem) {
+  useEffect(() => {
+    messagesByWorkspaceRef.current = messagesByWorkspace;
+  }, [messagesByWorkspace]);
+
+  async function handleAcceptInvite(notification: NotificationItem) {
     if (!notification.inviteWorkspaceName) return;
     const invite = incomingInvites.find((item) => item.id === notification.id);
 
-    if (invite?.workspaceId && invite.invitedEmail) {
-      setIncomingInvites((prev) =>
-        prev.map((item) =>
-          item.id === notification.id ? { ...item, status: 'accepted' } : item
-        )
-      );
-      setMembersByWorkspace((prev) => ({
-        ...prev,
-        [invite.workspaceId as string]: (prev[invite.workspaceId as string] ?? []).map(
-          (member) =>
-            member.email.toLowerCase() === invite.invitedEmail?.toLowerCase()
-              ? {
-                  ...member,
-                  status: 'active',
-                  profileStatus: 'online',
-                  bio: 'Sudah menerima undangan workspace.',
-                }
-              : member
-        ),
-      }));
-      setInviteMessage(`${invite.invitedEmail} menerima invite.`);
+    if (!invite) return;
+
+    if (invite.invitedEmail) {
       showToast({
-        type: 'success',
-        title: 'Invite diterima',
-        description: `${invite.invitedEmail} sekarang aktif di workspace.`,
+        type: 'info',
+        title: 'Menunggu penerima',
+        description: 'Invite keluar hanya bisa diterima oleh akun yang diundang.',
       });
       return;
     }
 
-    const workspaceId = `accepted-${notification.id}`;
-    const firstRoomId = `${workspaceId}-diskusi-utama`;
-    const nextWorkspace: Workspace = {
-      id: workspaceId,
-      name: notification.inviteWorkspaceName,
-      shortName: makeInitials(notification.inviteWorkspaceName),
-      description: `Workspace dari undangan ${notification.inviteCode ?? ''}.`,
-      color: WORKSPACE_COLORS[workspaces.length % WORKSPACE_COLORS.length],
-      inviteCode: notification.inviteCode ?? notification.id.toUpperCase(),
-    };
-    const firstRoom: Room = {
-      id: firstRoomId,
-      name: 'diskusi-utama',
-      icon: 'message',
-      description: `Ruang awal untuk ${notification.inviteWorkspaceName}.`,
-    };
+    try {
+      const accessToken = await getAccessToken();
+      const { invite: acceptedInvite, workspace, channel } = await apiFetch<InviteActionResponse>(
+        `/api/workspaces/invites/${invite.id}/accept`,
+        {
+          method: 'POST',
+          accessToken,
+        }
+      );
 
-    setIncomingInvites((prev) =>
-      prev.map((invite) =>
-        invite.id === notification.id ? { ...invite, status: 'accepted' } : invite
-      )
-    );
-    setWorkspaces((prev) =>
-      prev.some((workspace) => workspace.id === workspaceId)
-        ? prev
-        : [...prev, nextWorkspace]
-    );
-    setRoomsByWorkspace((prev) => ({
-      ...prev,
-      [workspaceId]: prev[workspaceId] ?? [firstRoom],
-    }));
-    setMessagesByWorkspace((prev) => ({
-      ...prev,
-      [workspaceId]: prev[workspaceId] ?? { [firstRoomId]: [] },
-    }));
-    setMembersByWorkspace((prev) => ({
-      ...prev,
-      [workspaceId]: prev[workspaceId] ?? [
-        {
-          id: currentUserId || `${workspaceId}-me`,
-          name: currentUserName,
-          email: currentUserEmail,
-          role: 'Member',
-          status: 'active',
-          avatar: currentUserAvatar,
-          photoUrl: currentUserPhotoUrl,
-          profileStatus: currentUserStatus,
-          bio: currentUserBio,
-        },
-        {
-          id: `${workspaceId}-inviter`,
-          name: notification.title.split(' ')[0] || 'Pengundang',
-          email: 'pengundang@workspace.local',
-          role: 'Admin',
-          status: 'active',
-          avatar: 'bg-violet-600',
-          profileStatus: 'online',
-          bio: 'Mengundang kamu ke workspace ini.',
-        },
-      ],
-    }));
-    setActiveWorkspaceId(workspaceId);
-    setActiveRoomId(firstRoomId);
-    setDraftFile(null);
-    setReplyToMessage(null);
+      setIncomingInvites((prev) =>
+        prev.map((item) => (item.id === invite.id ? acceptedInvite : item))
+      );
+
+      if (currentUser) {
+        await loadWorkspaceData(currentUser, accessToken);
+      }
+
+      if (workspace) setActiveWorkspaceId(workspace.id);
+      if (channel) setActiveRoomId(channel.id);
+      setDraftFile(null);
+      setReplyToMessage(null);
+      showToast({
+        type: 'success',
+        title: 'Invite diterima',
+        description: `Kamu bergabung ke ${acceptedInvite.workspaceName}.`,
+      });
+    } catch (error) {
+      showActionError('Gagal menerima invite', error);
+    }
   }
 
-  function handleDeclineInvite(notification: NotificationItem) {
+  async function handleDeclineInvite(notification: NotificationItem) {
     const invite = incomingInvites.find((item) => item.id === notification.id);
 
-    setIncomingInvites((prev) =>
-      prev.map((invite) =>
-        invite.id === notification.id ? { ...invite, status: 'declined' } : invite
-      )
-    );
+    if (!invite) return;
 
-    if (invite?.workspaceId && invite.invitedEmail) {
-      setMembersByWorkspace((prev) => ({
-        ...prev,
-        [invite.workspaceId as string]: (prev[invite.workspaceId as string] ?? []).filter(
-          (member) =>
-            member.email.toLowerCase() !== invite.invitedEmail?.toLowerCase()
-        ),
-      }));
-      setInviteMessage(`${invite.invitedEmail} menolak invite.`);
+    try {
+      if (invite.invitedEmail) {
+        await apiFetch(`/api/workspaces/invites/${invite.id}`, {
+          method: 'DELETE',
+          accessToken: await getAccessToken(),
+        });
+
+        setIncomingInvites((prev) => prev.filter((item) => item.id !== invite.id));
+        if (invite.workspaceId) {
+          setMembersByWorkspace((prev) => ({
+            ...prev,
+            [invite.workspaceId as string]: (prev[invite.workspaceId as string] ?? []).filter(
+              (member) =>
+                member.email.toLowerCase() !== invite.invitedEmail?.toLowerCase()
+            ),
+          }));
+        }
+        setInviteMessage(`${invite.invitedEmail} dibatalkan.`);
+      } else {
+        const { invite: declinedInvite } = await apiFetch<InviteActionResponse>(
+          `/api/workspaces/invites/${invite.id}/decline`,
+          {
+            method: 'POST',
+            accessToken: await getAccessToken(),
+          }
+        );
+
+        setIncomingInvites((prev) =>
+          prev.map((item) => (item.id === invite.id ? declinedInvite : item))
+        );
+      }
       showToast({
         type: 'info',
         title: 'Invite dibatalkan',
-        description: `${invite.invitedEmail} dihapus dari daftar pending.`,
+        description: invite.invitedEmail || invite.workspaceName,
       });
+    } catch (error) {
+      showActionError('Gagal memproses invite', error);
     }
   }
 
@@ -831,6 +1104,8 @@ export default function WorkspacePage() {
                 fileSize: file.size,
                 contentBase64: await readFileAsBase64(file),
                 caption: text,
+                replyToMessageId: replyToMessage?.id,
+                replyTo: replySnapshot,
               }),
             }
           )
@@ -842,6 +1117,8 @@ export default function WorkspacePage() {
               body: JSON.stringify({
                 content: text,
                 type: 'text',
+                replyToMessageId: replyToMessage?.id,
+                replyTo: replySnapshot,
               }),
             }
           );
@@ -1058,50 +1335,66 @@ export default function WorkspacePage() {
     }
   }
 
-  function handleDeleteMessageForMe(messageId: Message['id']) {
+  async function handleDeleteMessageForMe(messageId: Message['id']) {
+    if (typeof messageId === 'string' && messageId.startsWith('pending-')) {
+      delete retryPayloadsRef.current[messageId];
+      updateCurrentRoomMessages((currentMessages) =>
+        currentMessages.filter((message) => message.id !== messageId)
+      );
+      return;
+    }
+
     if (typeof messageId === 'string') delete retryPayloadsRef.current[messageId];
 
-    updateCurrentRoomMessages((currentMessages) =>
-      currentMessages.filter((message) => message.id !== messageId)
-    );
-    setReplyToMessage((current) => (current?.id === messageId ? null : current));
-    setEditingMessage((current) => (current?.id === messageId ? null : current));
-    showToast({
-      type: 'info',
-      title: 'Pesan dihapus untuk kamu',
-    });
+    try {
+      await apiFetch<MessageUserStateResponse>(
+        `/api/workspaces/messages/${messageId}/user-state`,
+        {
+          method: 'PATCH',
+          accessToken: await getAccessToken(),
+          body: JSON.stringify({ hidden: true }),
+        }
+      );
+
+      updateCurrentRoomMessages((currentMessages) =>
+        currentMessages.filter((message) => message.id !== messageId)
+      );
+      setReplyToMessage((current) => (current?.id === messageId ? null : current));
+      setEditingMessage((current) => (current?.id === messageId ? null : current));
+      showToast({
+        type: 'info',
+        title: 'Pesan dihapus untuk kamu',
+      });
+    } catch (error) {
+      showActionError('Gagal menghapus pesan untuk kamu', error);
+    }
   }
 
-  function handleDeleteMessageForEveryone(message: Message) {
+  async function handleDeleteMessageForEveryone(message: Message) {
     if (typeof message.id === 'string') delete retryPayloadsRef.current[message.id];
 
-    updateCurrentRoomMessages((currentMessages) =>
-      currentMessages.map((item) =>
-        item.id === message.id
-          ? {
-              ...item,
-              type: 'text',
-              text: undefined,
-              fileName: undefined,
-              fileSize: undefined,
-              fileUrl: undefined,
-              mimeType: undefined,
-              replyTo: undefined,
-              pinned: false,
-              reactions: [],
-              deliveryStatus: undefined,
-              deletedForEveryone: true,
-            }
-          : item
-      )
-    );
-    setReplyToMessage((current) => (current?.id === message.id ? null : current));
-    setEditingMessage((current) => (current?.id === message.id ? null : current));
-    showToast({
-      type: 'info',
-      title: 'Pesan dihapus untuk semua orang',
-      description: 'Tampilan ini masih disimpan di frontend sampai backend mendukung tombstone message.',
-    });
+    try {
+      setBusyActions((prev) => ({ ...prev, deleteMessage: true }));
+      await apiFetch(`/api/workspaces/messages/${message.id}`, {
+        method: 'DELETE',
+        accessToken: await getAccessToken(),
+      });
+
+      updateCurrentRoomMessages((currentMessages) =>
+        currentMessages.filter((item) => item.id !== message.id)
+      );
+      setReplyToMessage((current) => (current?.id === message.id ? null : current));
+      setEditingMessage((current) => (current?.id === message.id ? null : current));
+      setDeletingMessage((current) => (current?.id === message.id ? null : current));
+      showToast({
+        type: 'success',
+        title: 'Pesan dihapus untuk semua orang',
+      });
+    } catch (error) {
+      showActionError('Gagal menghapus pesan untuk semua orang', error);
+    } finally {
+      setBusyActions((prev) => ({ ...prev, deleteMessage: false }));
+    }
   }
 
   function handleStartEdit(message: Message) {
@@ -1163,95 +1456,118 @@ export default function WorkspacePage() {
     void handleSendMessage(text, file);
   }
 
-  function handleToggleReaction(messageId: Message['id'], emoji: string) {
-    updateCurrentRoomMessages((currentMessages) =>
-      currentMessages.map((message) => {
-        if (message.id !== messageId) return message;
-
-        const reactions = message.reactions ?? [];
-        const existingReaction = reactions.find((reaction) => reaction.emoji === emoji);
-
-        if (!existingReaction) {
-          return {
-            ...message,
-            reactions: [...reactions, { emoji, count: 1, reacted: true }],
-          };
+  async function handleToggleReaction(messageId: Message['id'], emoji: string) {
+    try {
+      const response = await apiFetch<ReactionResponse>(
+        `/api/workspaces/messages/${messageId}/reactions`,
+        {
+          method: 'POST',
+          accessToken: await getAccessToken(),
+          body: JSON.stringify({ emoji }),
         }
+      );
 
-        const nextReaction = {
-          ...existingReaction,
-          count: existingReaction.reacted
-            ? Math.max(0, existingReaction.count - 1)
-            : existingReaction.count + 1,
-          reacted: !existingReaction.reacted,
-        };
-
-        return {
-          ...message,
-          reactions: reactions
-            .map((reaction) =>
-              reaction.emoji === emoji ? nextReaction : reaction
-            )
-            .filter((reaction) => reaction.count > 0),
-        };
-      })
-    );
+      updateCurrentRoomMessages((currentMessages) =>
+        currentMessages.map((message) =>
+          message.id === messageId
+            ? { ...message, reactions: response.reactions ?? [] }
+            : message
+        )
+      );
+    } catch (error) {
+      showActionError('Gagal mengubah reaction', error);
+    }
   }
 
-  function handleToggleStar(messageId: Message['id']) {
-    updateCurrentRoomMessages((currentMessages) =>
-      currentMessages.map((message) =>
-        message.id === messageId
-          ? { ...message, starred: !message.starred }
-          : message
-      )
-    );
+  async function handleToggleStar(messageId: Message['id']) {
+    const targetMessage = messages.find((message) => message.id === messageId);
+    if (!targetMessage) return;
+
+    const nextStarred = !targetMessage.starred;
+
+    try {
+      await apiFetch<MessageUserStateResponse>(
+        `/api/workspaces/messages/${messageId}/user-state`,
+        {
+          method: 'PATCH',
+          accessToken: await getAccessToken(),
+          body: JSON.stringify({ starred: nextStarred }),
+        }
+      );
+
+      updateCurrentRoomMessages((currentMessages) =>
+        currentMessages.map((message) =>
+          message.id === messageId
+            ? { ...message, starred: nextStarred }
+            : message
+        )
+      );
+    } catch (error) {
+      showActionError('Gagal mengubah bintang pesan', error);
+    }
   }
 
-  function handleConfirmForward(roomId: string) {
+  async function handleConfirmForward(roomId: string) {
     if (!forwardingMessage || !activeWorkspaceId) return;
 
     const targetRoom = rooms.find((room) => room.id === roomId);
-    const forwardedMessage: Message = {
-      ...forwardingMessage,
-      id: `forward-${Date.now()}`,
-      user: currentUserName,
-      avatar: currentUserAvatar,
-      senderId: currentUserId,
-      isMine: true,
-      time: new Date().toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-      }),
-      pinned: false,
-      starred: false,
-      reactions: [],
-      replyTo: {
-        user: forwardingMessage.user,
-        preview: forwardingMessage.text ?? forwardingMessage.fileName ?? 'Lampiran',
-      },
-      text: forwardingMessage.text
-        ? `Diteruskan: ${forwardingMessage.text}`
-        : forwardingMessage.text,
-    };
 
-    setMessagesByWorkspace((prev) => {
-      const targetMessages = prev[activeWorkspaceId]?.[roomId] ?? [];
+    try {
+      setBusyActions((prev) => ({ ...prev, forwardMessage: true }));
+      const { message } = await apiFetch<CreateMessageResponse>(
+        `/api/workspaces/messages/${forwardingMessage.id}/forward`,
+        {
+          method: 'POST',
+          accessToken: await getAccessToken(),
+          body: JSON.stringify({
+            channelId: roomId,
+            content: forwardingMessage.text ?? null,
+            forwardedFrom: {
+              user: forwardingMessage.user,
+              preview: forwardingMessage.text ?? forwardingMessage.fileName ?? 'Lampiran',
+            },
+          }),
+        }
+      );
+      const nextMessage = toMessage(
+        message,
+        currentUser ?? {
+          id: currentUserId,
+          name: currentUserName,
+          email: currentUserEmail,
+          initial: currentUserInitial,
+          avatar: currentUserAvatar,
+          photoUrl: currentUserPhotoUrl,
+          bio: currentUserBio,
+          status: currentUserStatus,
+        }
+      );
 
-      return {
-        ...prev,
-        [activeWorkspaceId]: {
-          ...(prev[activeWorkspaceId] ?? {}),
-          [roomId]: [...targetMessages, forwardedMessage],
-        },
-      };
-    });
-    setForwardingMessage(null);
-    showToast({
-      type: 'success',
-      title: 'Pesan diteruskan',
-      description: targetRoom ? `Ke #${targetRoom.name}` : undefined,
-    });
+      setMessagesByWorkspace((prev) => {
+        const targetMessages = prev[activeWorkspaceId]?.[roomId] ?? [];
+        const nextMessages = targetMessages.some((item) => item.id === nextMessage.id)
+          ? targetMessages
+          : [...targetMessages, nextMessage];
+
+        return {
+          ...prev,
+          [activeWorkspaceId]: {
+            ...(prev[activeWorkspaceId] ?? {}),
+            [roomId]: nextMessages,
+          },
+        };
+      });
+      setForwardingMessage(null);
+      showToast({
+        type: 'success',
+        title: 'Pesan diteruskan',
+        description: targetRoom ? `Ke #${targetRoom.name}` : undefined,
+      });
+    } catch (error) {
+      showActionError('Gagal meneruskan pesan', error);
+    } finally {
+      setBusyActions((prev) => ({ ...prev, forwardMessage: false }));
+    }
   }
 
   async function handleCopyFileLink(message: Message) {
@@ -1326,13 +1642,15 @@ export default function WorkspacePage() {
   ) {
     try {
       setBusyActions((prev) => ({ ...prev, updateWorkspace: true }));
-      const { photoUrl, ...workspaceUpdates } = updates;
       const { workspace } = await apiFetch<UpdateWorkspaceResponse>(
         `/api/workspaces/${activeWorkspaceId}`,
         {
           method: 'PATCH',
           accessToken: await getAccessToken(),
-          body: JSON.stringify(workspaceUpdates),
+          body: JSON.stringify({
+            ...updates,
+            photoUrl: updates.photoUrl ?? null,
+          }),
         }
       );
       const nextWorkspace = toWorkspace(
@@ -1343,7 +1661,7 @@ export default function WorkspacePage() {
       setWorkspaces((prev) =>
         prev.map((item) =>
           item.id === activeWorkspaceId
-            ? { ...item, ...nextWorkspace, shortName: updates.shortName, photoUrl }
+            ? { ...item, ...nextWorkspace }
             : item
         )
       );
@@ -1645,7 +1963,7 @@ export default function WorkspacePage() {
     try {
       setBusyActions((prev) => ({ ...prev, inviteMember: true }));
       const accessToken = await getAccessToken();
-      const { member } = await apiFetch<InviteMemberResponse>(
+      const { invite, member } = await apiFetch<InviteMemberResponse>(
         `/api/workspaces/${activeWorkspaceId}/invite`,
         {
           method: 'POST',
@@ -1674,7 +1992,7 @@ export default function WorkspacePage() {
         profileStatus: 'offline',
         bio: 'Menunggu konfirmasi invite.',
       };
-      const nextInvite: PendingInvitation = {
+      const nextInvite: PendingInvitation = invite ?? {
         id: `invite-${activeWorkspaceId}-${Date.now()}`,
         workspaceId: activeWorkspaceId,
         workspaceName: activeWorkspace.name,
@@ -1696,7 +2014,10 @@ export default function WorkspacePage() {
           [activeWorkspaceId]: [...withoutDuplicate, nextMember],
         };
       });
-      setIncomingInvites((prev) => [nextInvite, ...prev]);
+      setIncomingInvites((prev) => [
+        nextInvite,
+        ...prev.filter((item) => item.id !== nextInvite.id),
+      ]);
       setInviteMessage(
         `Invite dikirim ke ${email}. Konfirmasi Gabung/Tolak muncul di notifikasi.`
       );
@@ -1948,6 +2269,7 @@ export default function WorkspacePage() {
           onSendMessage={handleSendMessage}
           onSaveEditMessage={handleSaveEdit}
           onDraftFileChange={setDraftFile}
+          onTypingChange={handleTypingChange}
           onCancelReply={() => setReplyToMessage(null)}
           onCancelEdit={() => setEditingMessage(null)}
           onReply={setReplyToMessage}

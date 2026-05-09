@@ -45,7 +45,7 @@ interface WorkspaceOverlaysProps {
   onUpdateWorkspace: (updates: Pick<Workspace, 'name' | 'shortName' | 'description' | 'color' | 'photoUrl'>) => void;
   onLeaveWorkspace: () => void;
   onCloseUserProfile: () => void;
-  onSaveProfile: (profile: { name: string; photoUrl?: string; bio: string }) => void;
+  onSaveProfile: (profile: { username: string; photoUrl?: string; bio: string }) => void;
   onCloseChannelSettings: () => void;
   onUpdateChannel: (updates: Pick<Room, 'name' | 'description' | 'favorite'>) => void;
   onArchiveToggle: () => void;
