@@ -2,8 +2,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
+import { MailCheck } from 'lucide-react';
 import AuthTextField from '@/components/auth/AuthTextField';
 import AuthThemeToggle from '@/components/auth/AuthThemeToggle';
 import { getSupabaseBrowserClient } from '@/lib/supabaseClient';
@@ -17,10 +17,10 @@ type RegisterFieldErrors = {
 };
 
 export default function RegisterPage() {
-  const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState('');
   const [isError, setIsError] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState('');
   const [fieldErrors, setFieldErrors] = useState<RegisterFieldErrors>({});
 
   function clearFieldError(field: keyof RegisterFieldErrors) {
@@ -86,6 +86,10 @@ export default function RegisterPage() {
         email,
         password,
         options: {
+          emailRedirectTo:
+            typeof window !== 'undefined'
+              ? `${window.location.origin}/login`
+              : undefined,
           data: {
             full_name: fullName,
             username,
@@ -103,7 +107,8 @@ export default function RegisterPage() {
         await supabase.auth.signOut();
       }
 
-      router.push('/login');
+      setRegisteredEmail(email);
+      setMessage('');
     } catch (error) {
       setIsError(true);
       setMessage(
@@ -172,13 +177,48 @@ export default function RegisterPage() {
         <div className="mx-auto w-full max-w-sm space-y-5 py-10">
           <div className="space-y-1">
             <h2 className="text-2xl font-semibold tracking-tight text-gray-900">
-              Buat akun baru
+              {registeredEmail ? 'Cek email kamu' : 'Buat akun baru'}
             </h2>
             <p className="text-sm text-gray-500">
-              Gratis selamanya untuk tim kecil
+              {registeredEmail
+                ? 'Konfirmasi akun sebelum masuk ke RuangKolaborasi'
+                : 'Gratis selamanya untuk tim kecil'}
             </p>
           </div>
 
+          {registeredEmail ? (
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5 text-emerald-900 shadow-sm">
+                <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-white text-emerald-600 shadow-sm">
+                  <MailCheck size={22} />
+                </div>
+                <h3 className="text-sm font-bold">Link konfirmasi sudah dikirim</h3>
+                <p className="mt-2 text-sm leading-6 text-emerald-800/80">
+                  Buka inbox atau folder spam untuk email{' '}
+                  <span className="font-semibold">{registeredEmail}</span>, lalu klik link
+                  konfirmasi dari Supabase/RuangKolaborasi.
+                </p>
+              </div>
+
+              <Link
+                href="/login"
+                className="flex h-10 w-full items-center justify-center rounded-lg bg-indigo-600 text-sm font-medium text-white transition-colors hover:bg-indigo-700"
+              >
+                Ke halaman login
+              </Link>
+              <button
+                type="button"
+                onClick={() => {
+                  setRegisteredEmail('');
+                  setMessage('');
+                  setIsError(false);
+                }}
+                className="h-10 w-full rounded-lg border border-gray-200 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
+              >
+                Daftar dengan email lain
+              </button>
+            </div>
+          ) : (
           <form className="space-y-4" onSubmit={handleSubmit} noValidate>
             <div className="flex gap-3">
               <AuthTextField
@@ -269,6 +309,7 @@ export default function RegisterPage() {
               {isSubmitting ? 'Memproses...' : 'Buat akun'}
             </button>
           </form>
+          )}
 
           <p className="text-center text-[11px] leading-relaxed text-gray-400">
             Dengan mendaftar, kamu menyetujui{' '}
