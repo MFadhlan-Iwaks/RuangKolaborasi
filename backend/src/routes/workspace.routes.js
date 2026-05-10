@@ -9,6 +9,8 @@ const STORAGE_BUCKET = 'workspace-files';
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const MAX_BASE64_CHARS = Math.ceil(MAX_FILE_BYTES / 3) * 4 + 16;
 const MAX_WORKSPACE_PHOTO_URL_CHARS = 3_000_000;
+const BOOTSTRAP_MESSAGES_PER_CHANNEL = 30;
+const CHANNEL_MESSAGES_MAX_LIMIT = 50;
 const ADMIN_ROLES = ['owner', 'admin'];
 const ALLOWED_MIME_PREFIXES = ['image/', 'text/', 'audio/', 'video/'];
 const ALLOWED_MIME_TYPES = new Set([
@@ -35,6 +37,7 @@ const MESSAGE_SELECT = `
   file_id,
   pinned,
   edited,
+  deleted_for_everyone,
   reply_to_message_id,
   reply_snapshot,
   forwarded_from_message_id,
@@ -494,10 +497,17 @@ function buildMessageSnapshot(message, fallbackName = 'Anggota') {
   };
 }
 
+function cleanSnapshotUser(value) {
+  return String(value || '')
+    .trim()
+    .replace(/\s+\(Kamu\)$/i, '')
+    .slice(0, 80);
+}
+
 function normalizeClientSnapshot(snapshot) {
   if (!snapshot || typeof snapshot !== 'object') return null;
 
-  const user = String(snapshot.user || '').trim().slice(0, 80);
+  const user = cleanSnapshotUser(snapshot.user);
   const preview = String(snapshot.preview || '').trim().slice(0, 180);
 
   if (!user && !preview) return null;
@@ -577,6 +587,7 @@ async function getMessageWithMembership(messageId, userId) {
       file_id,
       pinned,
       edited,
+      deleted_for_everyone,
       reply_to_message_id,
       reply_snapshot,
       forwarded_from_message_id,
@@ -685,6 +696,7 @@ async function mapMessageWithFile(message, currentUser, userState = null) {
     type: message.type,
     pinned: message.pinned || false,
     edited: message.edited || false,
+    deleted_for_everyone: message.deleted_for_everyone || false,
     starred: !!userState?.starred,
     reply_to_message_id: message.reply_to_message_id || null,
     reply_snapshot: message.reply_snapshot || null,
@@ -694,6 +706,19 @@ async function mapMessageWithFile(message, currentUser, userState = null) {
     created_at: message.created_at,
     file
   };
+}
+
+async function getVisibleMessagePayload(messageId, user) {
+  const message = await getMessageWithMembership(messageId, user.id);
+  const userState = await getMessageUserState(message.id, user.id);
+
+  if (userState?.hidden) {
+    const notFound = new Error('Message not found');
+    notFound.status = 404;
+    throw notFound;
+  }
+
+  return mapMessageWithFile(message, user, userState);
 }
 
 async function getMessageUserState(messageId, userId) {
@@ -819,7 +844,8 @@ async function buildBootstrapPayload(user) {
         .from('messages')
         .select(MESSAGE_SELECT)
         .eq('channel_id', channel.id)
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: false })
+        .limit(BOOTSTRAP_MESSAGES_PER_CHANNEL);
 
       if (messagesError) {
         messagesError.status = 500;
@@ -848,6 +874,8 @@ async function buildBootstrapPayload(user) {
 
       messagesByWorkspace[workspace.id][channel.id] = await Promise.all(
         (messages || [])
+          .slice()
+          .reverse()
           .filter((message) => !userStatesByMessageId[message.id]?.hidden)
           .map((message) =>
             mapMessageWithFile(message, user, userStatesByMessageId[message.id])
@@ -868,6 +896,83 @@ async function buildBootstrapPayload(user) {
 router.get('/bootstrap', requireAuth, asyncHandler(async (req, res) => {
   const payload = await buildBootstrapPayload(req.user);
   res.json(payload);
+}));
+
+router.get('/channels/:channelId/messages', requireAuth, asyncHandler(async (req, res) => {
+  const channel = await getChannelWithMembership(req.params.channelId, req.user.id);
+  const requestedLimit = Number(req.query.limit ?? BOOTSTRAP_MESSAGES_PER_CHANNEL);
+  const limit = Number.isFinite(requestedLimit)
+    ? Math.min(Math.max(Math.trunc(requestedLimit), 1), CHANNEL_MESSAGES_MAX_LIMIT)
+    : BOOTSTRAP_MESSAGES_PER_CHANNEL;
+  const before = typeof req.query.before === 'string' ? req.query.before : '';
+
+  let query = supabaseAdmin
+    .from('messages')
+    .select(MESSAGE_SELECT)
+    .eq('channel_id', channel.id)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (before) {
+    query = query.lt('created_at', before);
+  }
+
+  const { data: messages, error } = await query;
+
+  if (error) {
+    error.status = 500;
+    throw error;
+  }
+
+  const messageIds = (messages || []).map((message) => message.id);
+  let userStatesByMessageId = {};
+
+  if (messageIds.length > 0) {
+    const { data: userStates, error: userStatesError } = await supabaseAdmin
+      .from('message_user_states')
+      .select('message_id, hidden, starred')
+      .eq('user_id', req.user.id)
+      .in('message_id', messageIds);
+
+    if (userStatesError) {
+      userStatesError.status = 500;
+      throw userStatesError;
+    }
+
+    userStatesByMessageId = Object.fromEntries(
+      (userStates || []).map((state) => [state.message_id, state])
+    );
+  }
+
+  const mappedMessages = await Promise.all(
+    (messages || [])
+      .slice()
+      .reverse()
+      .filter((message) => !userStatesByMessageId[message.id]?.hidden)
+      .map((message) =>
+        mapMessageWithFile(message, req.user, userStatesByMessageId[message.id])
+      )
+  );
+
+  const responseRows = messages || [];
+
+  res.json({
+    channelId: channel.id,
+    messages: mappedMessages,
+    page: {
+      limit,
+      hasMore: responseRows.length === limit,
+      nextBefore: responseRows[responseRows.length - 1]?.created_at || null
+    }
+  });
+}));
+
+router.get('/messages/:messageId', requireAuth, asyncHandler(async (req, res) => {
+  const message = await getVisibleMessagePayload(req.params.messageId, req.user);
+
+  res.json({
+    message
+  });
 }));
 
 router.post('/', requireAuth, asyncHandler(async (req, res) => {
@@ -1799,8 +1904,10 @@ router.delete('/messages/:messageId', requireAuth, asyncHandler(async (req, res)
     });
   }
 
+  let file = null;
+
   if (message.file_id) {
-    const { data: file, error: fileLookupError } = await supabaseAdmin
+    const { data, error: fileLookupError } = await supabaseAdmin
       .from('files')
       .select('id, bucket_name, storage_path')
       .eq('id', message.file_id)
@@ -1811,49 +1918,60 @@ router.delete('/messages/:messageId', requireAuth, asyncHandler(async (req, res)
       throw fileLookupError;
     }
 
-    if (file) {
-      const { error: storageError } = await supabaseAdmin.storage
-        .from(file.bucket_name || STORAGE_BUCKET)
-        .remove([file.storage_path]);
+    file = data;
+  }
 
-      if (storageError) {
-        storageError.status = 500;
-        throw storageError;
-      }
+  const { error: messageUpdateError } = await supabaseAdmin
+    .from('messages')
+    .update({
+      content: 'Pesan ini telah dihapus',
+      type: 'text',
+      file_id: null,
+      deleted_for_everyone: true,
+      deleted_at: new Date().toISOString(),
+      deleted_by: req.user.id,
+      edited: false,
+      pinned: false
+    })
+    .eq('id', message.id);
 
-      const { error: fileDeleteError } = await supabaseAdmin
-        .from('files')
-        .delete()
-        .eq('id', file.id);
+  if (messageUpdateError) {
+    messageUpdateError.status = 500;
+    throw messageUpdateError;
+  }
 
-      if (fileDeleteError) {
-        fileDeleteError.status = 500;
-        throw fileDeleteError;
-      }
+  if (file) {
+    const { error: storageError } = await supabaseAdmin.storage
+      .from(file.bucket_name || STORAGE_BUCKET)
+      .remove([file.storage_path]);
+
+    if (storageError) {
+      storageError.status = 500;
+      throw storageError;
     }
 
-    const { error: messageDeleteError } = await supabaseAdmin
-      .from('messages')
+    const { error: fileDeleteError } = await supabaseAdmin
+      .from('files')
       .delete()
-      .eq('id', message.id);
+      .eq('id', file.id);
 
-    if (messageDeleteError) {
-      messageDeleteError.status = 500;
-      throw messageDeleteError;
-    }
-  } else {
-    const { error } = await supabaseAdmin
-      .from('messages')
-      .delete()
-      .eq('id', message.id);
-
-    if (error) {
-      error.status = 500;
-      throw error;
+    if (fileDeleteError) {
+      fileDeleteError.status = 500;
+      throw fileDeleteError;
     }
   }
 
-  res.json({ deleted: true });
+  const { error: reactionDeleteError } = await supabaseAdmin
+    .from('message_reactions')
+    .delete()
+    .eq('message_id', message.id);
+
+  if (reactionDeleteError) {
+    reactionDeleteError.status = 500;
+    throw reactionDeleteError;
+  }
+
+  res.json({ deleted: true, messageId: message.id });
 }));
 
 router.post('/channels/:channelId/files', requireAuth, asyncHandler(async (req, res) => {

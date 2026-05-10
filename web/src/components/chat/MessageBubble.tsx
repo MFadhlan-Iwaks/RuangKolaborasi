@@ -180,6 +180,8 @@ export default function MessageBubble({
             <img
               src={message.photoUrl}
               alt={message.user}
+              loading="lazy"
+              decoding="async"
               className="mb-1 hidden h-8 w-8 shrink-0 rounded-full object-cover shadow-sm sm:block"
             />
           ) : (
@@ -258,6 +260,8 @@ export default function MessageBubble({
                 <img
                   src={message.fileUrl}
                   alt={message.fileName || 'Lampiran gambar'}
+                  loading="lazy"
+                  decoding="async"
                   className="max-h-72 max-w-full rounded-xl border border-black/5 object-contain sm:max-w-sm"
                 />
               )}
@@ -265,6 +269,7 @@ export default function MessageBubble({
                 <video
                   src={message.fileUrl}
                   controls
+                  preload="metadata"
                   className="max-h-72 w-[min(20rem,78vw)] max-w-full rounded-xl border border-black/5 bg-black"
                 />
               )}
@@ -274,7 +279,12 @@ export default function MessageBubble({
                     isMine ? 'bg-white/15' : 'bg-gray-50'
                   }`}
                 >
-                  <audio src={message.fileUrl} controls className="w-[min(18rem,76vw)] max-w-full" />
+                  <audio
+                    src={message.fileUrl}
+                    controls
+                    preload="metadata"
+                    className="w-[min(18rem,76vw)] max-w-full"
+                  />
                 </div>
               )}
               {!message.mimeType?.startsWith('image/') &&

@@ -332,9 +332,31 @@ export default function WorkspacePage() {
 
           if (row.type === 'file' || row.type === 'image') {
             try {
-              await loadWorkspaceData(currentUser, await getAccessToken());
+              const { message } = await apiFetch<CreateMessageResponse>(
+                `/api/workspaces/messages/${row.id}`,
+                {
+                  accessToken: await getAccessToken(),
+                }
+              );
+              const nextMessage = toMessage(message, currentUser);
+
+              setMessagesByWorkspace((prev) => {
+                const currentMessages = prev[activeWorkspaceId]?.[activeRoomId] ?? [];
+
+                if (currentMessages.some((item) => item.id === nextMessage.id)) {
+                  return prev;
+                }
+
+                return {
+                  ...prev,
+                  [activeWorkspaceId]: {
+                    ...(prev[activeWorkspaceId] ?? {}),
+                    [activeRoomId]: [...currentMessages, nextMessage],
+                  },
+                };
+              });
             } catch (error) {
-              console.error('Gagal memuat ulang file message:', getReadableError(error), error);
+              console.error('Gagal memuat file message realtime:', getReadableError(error), error);
             }
             return;
           }
@@ -407,9 +429,18 @@ export default function WorkspacePage() {
                 message.id === row.id
                   ? {
                       ...message,
-                      text: row.content || undefined,
-                      pinned: !!row.pinned,
-                      edited: !!row.edited,
+                      text: row.deleted_for_everyone
+                        ? undefined
+                        : row.content || undefined,
+                      type: row.deleted_for_everyone ? 'text' : message.type,
+                      fileName: row.deleted_for_everyone ? undefined : message.fileName,
+                      fileSize: row.deleted_for_everyone ? undefined : message.fileSize,
+                      fileUrl: row.deleted_for_everyone ? undefined : message.fileUrl,
+                      mimeType: row.deleted_for_everyone ? undefined : message.mimeType,
+                      pinned: row.deleted_for_everyone ? false : !!row.pinned,
+                      edited: row.deleted_for_everyone ? false : !!row.edited,
+                      deletedForEveryone: !!row.deleted_for_everyone,
+                      reactions: row.deleted_for_everyone ? [] : message.reactions,
                     }
                   : message
               ),
@@ -885,6 +916,15 @@ export default function WorkspacePage() {
   async function handleLogout() {
     try {
       const supabase = getSupabaseBrowserClient();
+      try {
+        await apiFetch('/api/auth/status', {
+          method: 'PATCH',
+          accessToken: await getAccessToken(),
+          body: JSON.stringify({ status: 'offline' }),
+        });
+      } catch (statusError) {
+        console.error('Gagal mengubah status logout:', getReadableError(statusError), statusError);
+      }
       await supabase.auth.signOut();
     } catch (error) {
       showActionError('Gagal logout', error);
