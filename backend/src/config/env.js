@@ -10,12 +10,10 @@ const requiredEnv = [
 ];
 
 function getEnv(name, fallback = undefined) {
-  const value = process.env[name] || fallback;
-
-  if (value === undefined || value === '') {
-    throw new Error(`Missing required environment variable: ${name}`);
-  }
-
+  const raw = process.env[name] || fallback;
+  if (raw === undefined || raw === null) return '';
+  const value = String(raw).trim();
+  if (value === '') return '';
   return value;
 }
 
@@ -23,8 +21,19 @@ function validateEnv() {
   const missing = requiredEnv.filter((name) => !process.env[name]);
 
   if (missing.length > 0) {
-    throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+    }
+
+    console.warn(`Warning: Missing environment variables (development): ${missing.join(', ')}`);
   }
+
+  console.log('--- Environment Configuration ---');
+  console.log('NODE_ENV:', process.env.NODE_ENV);
+  console.log('PORT:', process.env.PORT || 5000);
+  console.log('SUPABASE_URL:', process.env.SUPABASE_URL || '(not set)');
+  console.log('SUPABASE_SECRET_KEY:', process.env.SUPABASE_SECRET_KEY ? `${process.env.SUPABASE_SECRET_KEY.substring(0, 10)}...` : 'MISSING');
+  console.log('---------------------------------');
 }
 
 module.exports = {

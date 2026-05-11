@@ -65,8 +65,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       return;
     }
 
-    final user = result.user!;
-    ref.read(userProvider.notifier).setAuthenticatedUser(user.name);
     Navigator.pushReplacementNamed(context, '/workspace');
   }
 

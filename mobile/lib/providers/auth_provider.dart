@@ -8,6 +8,8 @@ class AuthUser {
   final String name;
   final String email;
   final String accessToken;
+  final String? avatarUrl;
+  final String? bio;
   final bool isGoogleAccount;
 
   const AuthUser({
@@ -15,6 +17,8 @@ class AuthUser {
     required this.name,
     required this.email,
     required this.accessToken,
+    this.avatarUrl,
+    this.bio,
     this.isGoogleAccount = false,
   });
 }
@@ -143,24 +147,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<AuthUser> _syncBackendProfile(SupabaseAuthSession session) async {
-    await _backendService.ensureProfile(
+    final profile = await _backendService.ensureProfile(
       accessToken: session.accessToken,
       fullName: session.name,
     );
 
-    // NOTE: setting auth token on the Supabase client must use the
-    // client API compatible with the installed `supabase_flutter` version.
-    // Previously attempted to call `setAuth(...)` but that method is not
-    // available in newer GOTRUE clients and causes a compile error.
-    // If realtime events are still blocked by RLS, update this code to
-    // set the session using the appropriate client method for your
-    // `supabase_flutter` version (or use the built-in auth client).
-
     return AuthUser(
       id: session.id,
-      name: session.name,
+      name: profile['full_name'] as String? ?? session.name,
       email: session.email,
       accessToken: session.accessToken,
+      avatarUrl: profile['avatar_url'] as String?,
+      bio: profile['bio'] as String?,
     );
   }
 

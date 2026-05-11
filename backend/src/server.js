@@ -5,6 +5,8 @@ validateEnv();
 
 const app = createApp();
 
-app.listen(env.port, () => {
-  console.log(`RuangKolaborasi backend running on port ${env.port}`);
+const host = '0.0.0.0';
+app.listen(env.port, host, () => {
+  console.log(`RuangKolaborasi backend running on http://${host}:${env.port}`);
+  console.log(`Local network access: http://localhost:${env.port}`);
 });

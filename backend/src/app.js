@@ -11,11 +11,15 @@ function createApp() {
   const app = express();
 
   app.use(helmet());
+  app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} - ${req.ip}`);
+    next();
+  });
   app.use(cors({
     origin: env.corsOrigin === '*' ? '*' : env.corsOrigin.split(',').map((origin) => origin.trim()),
     credentials: env.corsOrigin !== '*'
   }));
-  app.use(express.json({ limit: '20mb' }));
+  app.use(express.json({ limit: '75mb' }));
 
   // Root route: redirect to health check for convenience
   app.get('/', (req, res) => {

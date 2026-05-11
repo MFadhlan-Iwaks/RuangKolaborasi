@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../data/models/chat_models.dart';
 import '../data/services/backend_service.dart';
+import '../data/services/media_cache_service.dart';
 import 'auth_provider.dart';
 import 'user_provider.dart';
 
@@ -62,9 +63,12 @@ class WorkspaceState {
     final channelId = activeChannel?.id;
     if (workspaceId == null || channelId == null) return const [];
 
-    return (messagesByWorkspace[workspaceId]?[channelId] ?? const [])
+    final messages = (messagesByWorkspace[workspaceId]?[channelId] ?? const [])
         .where((message) => !hiddenMessageIds.contains(message.id))
         .toList();
+    
+    // Sort by ID or timestamp to ensure newest is first, or just reverse if backend returns chronological
+    return messages.reversed.toList();
   }
 
   WorkspaceState copyWith({
@@ -150,6 +154,15 @@ class WorkspaceNotifier extends StateNotifier<WorkspaceState> {
         activeChannelId: activeChannelId,
       );
 
+      // Pre-cache media for all messages from bootstrap
+      for (final workspaceEntry in bootstrap.messagesByWorkspace.values) {
+        for (final channelMessages in workspaceEntry.values) {
+          for (final message in channelMessages) {
+            mediaCacheService.precacheMessage(message);
+          }
+        }
+      }
+
       print(
         'Workspace bootstrap completed. activeWorkspaceId=$activeWorkspaceId activeChannelId=$activeChannelId accessTokenPresent=${_accessToken.isNotEmpty}',
       );
@@ -230,10 +243,7 @@ class WorkspaceNotifier extends StateNotifier<WorkspaceState> {
     if (profileId == null || status == null) return;
 
     if (profileId == _currentUserId) {
-      final userStatus = UserStatus.values.firstWhere(
-        (e) => e.name == status,
-        orElse: () => UserStatus.online,
-      );
+      final userStatus = _mapBackendStatus(status);
       // Hindari loop jika status sama
       if (_ref.read(userProvider).status != userStatus) {
         _ref.read(userProvider.notifier).setAuthenticatedUserStatus(userStatus);
@@ -244,21 +254,44 @@ class WorkspaceNotifier extends StateNotifier<WorkspaceState> {
       for (final entry in state.membersByWorkspace.entries)
         entry.key: entry.value.map((member) {
           if (member.id == profileId) {
-            return WorkspaceMember(
-              id: member.id,
-              workspaceId: member.workspaceId,
-              role: member.role,
-              fullName: member.fullName,
-              email: member.email,
-              avatarUrl: member.avatarUrl,
-              status: status,
-            );
+            return member.copyWith(status: status);
           }
           return member;
         }).toList(),
     };
 
-    state = state.copyWith(membersByWorkspace: membersByWorkspace);
+    // Update message sender statuses in real-time
+    final messagesByWorkspace = {
+      for (final workspaceEntry in state.messagesByWorkspace.entries)
+        workspaceEntry.key: {
+          for (final channelEntry in workspaceEntry.value.entries)
+            channelEntry.key: channelEntry.value.map((msg) {
+              if (msg.senderId == profileId) {
+                return msg.copyWith(status: status);
+              }
+              return msg;
+            }).toList()
+        }
+    };
+
+    state = state.copyWith(
+      membersByWorkspace: membersByWorkspace,
+      messagesByWorkspace: messagesByWorkspace,
+    );
+  }
+
+  UserStatus _mapBackendStatus(String status) {
+    switch (status) {
+      case 'online':
+        return UserStatus.online;
+      case 'idle':
+        return UserStatus.idle;
+      case 'dnd':
+        return UserStatus.dnd;
+      case 'offline':
+      default:
+        return UserStatus.invisible;
+    }
   }
 
   void _startListening(String channelId) {
@@ -359,12 +392,9 @@ class WorkspaceNotifier extends StateNotifier<WorkspaceState> {
     final senderId = row['sender_id'] as String?;
     if (senderId == null) return;
 
-    // Jika ini adalah pesan file/image, sebaiknya bootstrap ulang untuk dapat signed URL dsb
-    // Mirip dengan perilaku di web
+    // Jika ini adalah pesan file/image/video/audio, sebaiknya bootstrap ulang untuk dapat signed URL dsb
     final type = row['type'] as String?;
-    if (type == 'file' || type == 'image') {
-      // Kita bisa panggil bootstrap secara debounced atau langsung
-      // Untuk simplisitas, kita biarkan dulu atau panggil bootstrap
+    if (type == 'file' || type == 'image' || type == 'video' || type == 'audio') {
       bootstrap();
       return;
     }
@@ -385,6 +415,7 @@ class WorkspaceNotifier extends StateNotifier<WorkspaceState> {
       'sender_name': senderId == _currentUserId
           ? '$displayName (Kamu)'
           : displayName,
+      'sender_status': member?.status ?? 'online',
     };
 
     final message = Message.fromJson(enrichedRow);
@@ -482,6 +513,35 @@ class WorkspaceNotifier extends StateNotifier<WorkspaceState> {
     }
   }
 
+  Future<void> joinWorkspace(String inviteCode) async {
+    if (_accessToken.isEmpty || inviteCode.trim().isEmpty) return;
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      await _backendService.joinWorkspace(
+        accessToken: _accessToken,
+        inviteCode: inviteCode.trim().toUpperCase(),
+      );
+      await bootstrap();
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: _cleanError(e));
+    }
+  }
+
+  Future<void> createWorkspace(String name, String description) async {
+    if (_accessToken.isEmpty || name.trim().isEmpty) return;
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      await _backendService.createWorkspace(
+        accessToken: _accessToken,
+        name: name.trim(),
+        description: description.trim(),
+      );
+      await bootstrap();
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: _cleanError(e));
+    }
+  }
+
   Future<void> createChannel(String name) async {
     final workspaceId = state.activeWorkspace?.id;
     if (_accessToken.isEmpty || workspaceId == null || name.trim().isEmpty) {
@@ -516,6 +576,20 @@ class WorkspaceNotifier extends StateNotifier<WorkspaceState> {
     }
   }
 
+  Future<void> deleteWorkspace(String workspaceId) async {
+    if (_accessToken.isEmpty) return;
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      await _backendService.deleteWorkspace(
+        accessToken: _accessToken,
+        workspaceId: workspaceId,
+      );
+      await bootstrap();
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: _cleanError(e));
+    }
+  }
+
   void clear() {
     _stopListening();
     _stopListeningProfiles();
@@ -539,6 +613,8 @@ class WorkspaceNotifier extends StateNotifier<WorkspaceState> {
       messages[index] = message;
     }
     messagesByWorkspace[workspaceId]![channelId] = messages;
+
+    mediaCacheService.precacheMessage(message);
 
     state = state.copyWith(messagesByWorkspace: messagesByWorkspace);
   }

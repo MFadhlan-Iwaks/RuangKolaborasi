@@ -43,6 +43,10 @@ class AppConfig {
   }
 
   static String _withoutTrailingSlash(String value) {
-    return value.trim().replaceFirst(RegExp(r'/+$'), '');
+    var trimmed = value.trim().replaceFirst(RegExp(r'/+$'), '');
+    if (trimmed.isNotEmpty && !trimmed.contains('://')) {
+      trimmed = 'http://$trimmed';
+    }
+    return trimmed;
   }
 }

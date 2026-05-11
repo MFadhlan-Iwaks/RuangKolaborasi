@@ -71,7 +71,7 @@ class BackendService {
           dio ??
           Dio(
             BaseOptions(
-              connectTimeout: const Duration(seconds: 5),
+              connectTimeout: const Duration(seconds: 10),
               receiveTimeout: const Duration(seconds: 45),
               headers: {'Content-Type': 'application/json'},
               validateStatus: (status) => status != null && status < 500,
@@ -96,7 +96,7 @@ class BackendService {
     );
   }
 
-  Future<void> ensureProfile({
+  Future<Map<String, dynamic>> ensureProfile({
     required String accessToken,
     required String fullName,
   }) async {
@@ -106,6 +106,8 @@ class BackendService {
       data: {'fullName': fullName},
     );
     _throwIfFailed(response);
+
+    return Map<String, dynamic>.from(response.data['profile'] as Map);
   }
 
   Future<void> updateStatus({
@@ -116,6 +118,65 @@ class BackendService {
       '/api/auth/status',
       accessToken,
       data: {'status': status},
+    );
+    _throwIfFailed(response);
+  }
+
+  Future<Map<String, dynamic>> updateProfile({
+    required String accessToken,
+    String? fullName,
+    String? bio,
+    String? avatarUrl,
+  }) async {
+    final response = await _authorizedPatch(
+      '/api/auth/profile',
+      accessToken,
+      data: {
+        if (fullName != null) 'fullName': fullName,
+        if (bio != null) 'bio': bio,
+        if (avatarUrl != null) 'avatarUrl': avatarUrl,
+      },
+    );
+    _throwIfFailed(response);
+
+    return Map<String, dynamic>.from(response.data['profile'] as Map);
+  }
+
+  Future<Map<String, dynamic>> createWorkspace({
+    required String accessToken,
+    required String name,
+    required String description,
+  }) async {
+    final response = await _authorizedPost(
+      '/api/workspaces',
+      accessToken,
+      data: {'name': name, 'description': description},
+    );
+    _throwIfFailed(response);
+
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  Future<Map<String, dynamic>> joinWorkspace({
+    required String accessToken,
+    required String inviteCode,
+  }) async {
+    final response = await _authorizedPost(
+      '/api/workspaces/join/$inviteCode',
+      accessToken,
+    );
+    _throwIfFailed(response);
+
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  Future<void> deleteWorkspace({
+    required String accessToken,
+    required String workspaceId,
+  }) async {
+    final response = await _authorizedDelete(
+      '/api/workspaces/$workspaceId/leave',
+      accessToken,
     );
     _throwIfFailed(response);
   }
@@ -299,24 +360,30 @@ class BackendService {
     }
 
     DioException? lastConnectionError;
+    final urls = AppConfig.apiBaseUrls;
 
-    for (final baseUrl in AppConfig.apiBaseUrls) {
+    for (final baseUrl in urls) {
       try {
+        print('Mencoba menghubungi backend di: $baseUrl$path');
         return await request(
           '$baseUrl$path',
           Options(headers: {'Authorization': 'Bearer $accessToken'}),
         );
       } on DioException catch (e) {
-        if (!_isConnectionError(e)) rethrow;
+        if (!_isConnectionError(e)) {
+          print('Backend di $baseUrl mengembalikan error non-koneksi: ${e.type} ${e.response?.statusCode}');
+          rethrow;
+        }
+        print('Gagal menghubungi $baseUrl: ${e.message}');
         lastConnectionError = e;
       }
     }
 
+    final triedUrls = urls.join(', ');
     throw Exception(
-      'Tidak bisa menghubungi backend di ${AppConfig.apiBaseUrls.join(', ')}. '
-      'Pastikan backend berjalan dan URL di .env cocok dengan target run. '
-      'Android emulator pakai http://10.0.2.2:5000, desktop pakai http://localhost:5000, HP fisik pakai IP laptop. '
-      '${lastConnectionError?.message ?? ''}',
+      'Tidak bisa menghubungi backend di $triedUrls. '
+      'Pastikan backend berjalan (npm run dev di folder backend) dan URL di .env mobile cocok. '
+      'Pesan error terakhir: ${lastConnectionError?.message ?? 'Unknown connection error'}',
     );
   }
 

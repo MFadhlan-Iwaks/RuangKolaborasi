@@ -6,7 +6,7 @@ const crypto = require('crypto');
 
 const router = express.Router();
 const STORAGE_BUCKET = 'workspace-files';
-const MAX_FILE_BYTES = 10 * 1024 * 1024;
+const MAX_FILE_BYTES = 50 * 1024 * 1024;
 const MAX_BASE64_CHARS = Math.ceil(MAX_FILE_BYTES / 3) * 4 + 16;
 const MAX_WORKSPACE_PHOTO_URL_CHARS = 3_000_000;
 const ADMIN_ROLES = ['owner', 'admin'];
@@ -40,7 +40,7 @@ const MESSAGE_SELECT = `
   forwarded_from_message_id,
   forwarded_snapshot,
   created_at,
-  profiles:sender_id(full_name, username, avatar_url)
+  profiles:sender_id(full_name, username, avatar_url, status)
 `;
 const INVITE_SELECT = `
   id,
@@ -607,6 +607,7 @@ async function mapMessageWithFile(message, currentUser, userState = null) {
       message.profiles?.full_name ||
       (message.sender_id === currentUser.id ? getDisplayName(currentUser) : 'Anggota'),
     sender_avatar_url: message.profiles?.avatar_url || null,
+    sender_status: message.profiles?.status || 'online',
     content: message.content,
     type: message.type,
     pinned: message.pinned || false,
@@ -1815,7 +1816,15 @@ router.post('/channels/:channelId/files', requireAuth, asyncHandler(async (req, 
     throw fileError;
   }
 
-  const messageType = mimeType.startsWith('image/') ? 'image' : 'file';
+  let messageType = 'file';
+  if (mimeType.startsWith('image/')) {
+    messageType = 'image';
+  } else if (mimeType.startsWith('video/')) {
+    messageType = 'video';
+  } else if (mimeType.startsWith('audio/')) {
+    messageType = 'audio';
+  }
+
   const { data: message, error: messageError } = await supabaseAdmin
     .from('messages')
     .insert({
