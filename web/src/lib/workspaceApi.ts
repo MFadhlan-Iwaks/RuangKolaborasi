@@ -47,6 +47,7 @@ export interface MessageRow {
   type: string;
   pinned?: boolean;
   edited?: boolean;
+  deleted_for_everyone?: boolean;
   starred?: boolean;
   reply_to_message_id?: string | null;
   reply_snapshot?: {
@@ -122,6 +123,10 @@ export interface MessageUserStateResponse {
 
 export interface InviteMemberResponse {
   invite?: PendingInvitation;
+  member: BootstrapMemberRow;
+}
+
+export interface UpdateMemberRoleResponse {
   member: BootstrapMemberRow;
 }
 
@@ -258,6 +263,7 @@ export function toMessage(
     mimeType: row.file?.mime_type || undefined,
     pinned: !!row.pinned,
     edited: !!row.edited,
+    deletedForEveryone: !!row.deleted_for_everyone,
     starred: !!row.starred,
     replyTo: row.reply_snapshot
       ? {

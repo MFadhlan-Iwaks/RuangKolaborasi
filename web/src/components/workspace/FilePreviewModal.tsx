@@ -48,6 +48,8 @@ export default function FilePreviewModal({
               <img
                 src={file.fileUrl}
                 alt={file.fileName || 'Preview file'}
+                loading="lazy"
+                decoding="async"
                 className="h-full w-full object-contain"
               />
             ) : (

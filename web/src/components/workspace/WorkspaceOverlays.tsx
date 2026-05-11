@@ -40,10 +40,14 @@ interface WorkspaceOverlaysProps {
   currentUserBio: string;
   currentUserStatus: Status;
   canManageWorkspace: boolean;
+  currentUserId: string;
+  currentWorkspaceRole?: TeamMember['role'];
   busyActions?: Record<string, boolean>;
   onCloseWorkspaceSettings: () => void;
   onUpdateWorkspace: (updates: Pick<Workspace, 'name' | 'shortName' | 'description' | 'color' | 'photoUrl'>) => void;
   onLeaveWorkspace: () => void;
+  onUpdateMemberRole: (memberId: string, role: TeamMember['role']) => void;
+  onKickMember: (member: TeamMember) => void;
   onCloseUserProfile: () => void;
   onSaveProfile: (profile: { username: string; photoUrl?: string; bio: string }) => void;
   onCloseChannelSettings: () => void;
@@ -97,10 +101,14 @@ export default function WorkspaceOverlays({
   currentUserBio,
   currentUserStatus,
   canManageWorkspace,
+  currentUserId,
+  currentWorkspaceRole,
   busyActions = {},
   onCloseWorkspaceSettings,
   onUpdateWorkspace,
   onLeaveWorkspace,
+  onUpdateMemberRole,
+  onKickMember,
   onCloseUserProfile,
   onSaveProfile,
   onCloseChannelSettings,
@@ -133,11 +141,16 @@ export default function WorkspaceOverlays({
           members={members}
           canLeave={true}
           canManageWorkspace={canManageWorkspace}
+          currentUserId={currentUserId}
+          currentWorkspaceRole={currentWorkspaceRole}
           isSaving={!!busyActions.updateWorkspace}
           isLeaving={!!busyActions.leaveWorkspace}
+          isManagingMember={!!busyActions.manageMember}
           onClose={onCloseWorkspaceSettings}
           onUpdate={onUpdateWorkspace}
           onLeave={onLeaveWorkspace}
+          onUpdateMemberRole={onUpdateMemberRole}
+          onKickMember={onKickMember}
         />
       )}
 

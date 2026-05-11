@@ -13,6 +13,8 @@ Run migrations from the `migrations` folder in Supabase SQL Editor.
 7. `migrations/007_workspace_invites_and_profile_bio.sql`
 8. `migrations/008_message_reply_forward_reactions.sql`
 9. `migrations/009_message_user_states.sql`
+10. `migrations/010_workspace_members_realtime.sql`
+11. `migrations/011_soft_delete_messages.sql`
 
 ## Notes
 
