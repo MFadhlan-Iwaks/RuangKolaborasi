@@ -1,4 +1,5 @@
-import 'package:dio/dio.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'app_config.dart';
 
 class SupabaseAuthSession {
@@ -6,48 +7,30 @@ class SupabaseAuthSession {
   final String email;
   final String name;
   final String accessToken;
+  final bool isGoogleAccount;
 
   const SupabaseAuthSession({
     required this.id,
     required this.email,
     required this.name,
     required this.accessToken,
+    this.isGoogleAccount = false,
   });
 }
 
 class SupabaseAuthService {
-  SupabaseAuthService({Dio? dio})
-    : _dio =
-          dio ??
-          Dio(
-            BaseOptions(
-              baseUrl: AppConfig.supabaseUrl,
-              connectTimeout: const Duration(seconds: 20),
-              receiveTimeout: const Duration(seconds: 30),
-              validateStatus: (status) => status != null && status < 500,
-            ),
-          );
-
-  final Dio _dio;
-
-  bool get isConfigured =>
-      AppConfig.supabaseUrl.isNotEmpty &&
-      AppConfig.supabasePublishableKey.isNotEmpty;
+  final _client = Supabase.instance.client;
 
   Future<SupabaseAuthSession> signInWithPassword({
     required String email,
     required String password,
   }) async {
-    _ensureConfigured();
-
-    final response = await _dio.post(
-      '/auth/v1/token',
-      queryParameters: {'grant_type': 'password'},
-      data: {'email': email, 'password': password},
-      options: Options(headers: _headers),
+    final response = await _client.auth.signInWithPassword(
+      email: email,
+      password: password,
     );
 
-    return _sessionFromResponse(response);
+    return _sessionFromAuthResponse(response);
   }
 
   Future<SupabaseAuthSession> signUp({
@@ -55,80 +38,69 @@ class SupabaseAuthService {
     required String email,
     required String password,
   }) async {
-    _ensureConfigured();
-
-    final response = await _dio.post(
-      '/auth/v1/signup',
-      data: {
-        'email': email,
-        'password': password,
-        'data': {'full_name': name, 'name': name},
-      },
-      options: Options(headers: _headers),
+    final response = await _client.auth.signUp(
+      email: email,
+      password: password,
+      data: {'full_name': name, 'name': name},
     );
 
-    return _sessionFromResponse(response);
+    return _sessionFromAuthResponse(response);
   }
 
-  Map<String, String> get _headers => {
-    'apikey': AppConfig.supabasePublishableKey,
-    'Authorization': 'Bearer ${AppConfig.supabasePublishableKey}',
-    'Content-Type': 'application/json',
-  };
-
-  void _ensureConfigured() {
-    if (isConfigured) return;
-
-    throw Exception(
-      'SUPABASE_URL dan SUPABASE_PUBLISHABLE_KEY belum diatur di file .env mobile.',
+  Future<SupabaseAuthSession> signInWithGoogle() async {
+    final clientId = AppConfig.googleClientId;
+    final googleSignIn = GoogleSignIn(
+      serverClientId: clientId.isNotEmpty ? clientId : null,
     );
+    final googleUser = await googleSignIn.signIn();
+
+    if (googleUser == null) {
+      throw 'Masuk dengan Google dibatalkan.';
+    }
+
+    final googleAuth = await googleUser.authentication;
+    final accessToken = googleAuth.accessToken;
+    final idToken = googleAuth.idToken;
+
+    if (idToken == null) {
+      throw 'Gagal mendapatkan ID Token dari Google.';
+    }
+
+    final response = await _client.auth.signInWithIdToken(
+      provider: OAuthProvider.google,
+      idToken: idToken,
+      accessToken: accessToken,
+    );
+
+    return _sessionFromAuthResponse(response);
   }
 
-  SupabaseAuthSession _sessionFromResponse(Response<dynamic> response) {
-    final statusCode = response.statusCode ?? 0;
-    final data = response.data;
+  SupabaseAuthSession _sessionFromAuthResponse(AuthResponse response) {
+    final session = response.session;
+    final user = response.user;
 
-    if (statusCode < 200 || statusCode >= 300) {
-      throw Exception(_errorMessage(data, statusCode));
-    }
-
-    if (data is! Map<String, dynamic>) {
-      throw Exception('Respons Supabase tidak valid.');
-    }
-
-    final accessToken = data['access_token'] as String?;
-    final user = data['user'] as Map<String, dynamic>?;
-
-    if (accessToken == null || user == null) {
+    if (session == null || user == null) {
       throw Exception(
         'Akun berhasil dibuat, tapi Supabase meminta verifikasi email sebelum login.',
       );
     }
 
-    final metadata = user['user_metadata'] as Map<String, dynamic>? ?? {};
-    final email = user['email'] as String? ?? '';
+    final metadata = user.userMetadata ?? {};
+    final email = user.email ?? '';
     final name =
         metadata['full_name'] as String? ??
         metadata['name'] as String? ??
         email.split('@').first;
+    
+    final provider = user.appMetadata['provider'] as String?;
+    final isGoogle = provider == 'google';
 
     return SupabaseAuthSession(
-      id: user['id'] as String? ?? '',
+      id: user.id,
       email: email,
       name: name,
-      accessToken: accessToken,
+      accessToken: session.accessToken,
+      isGoogleAccount: isGoogle,
     );
-  }
-
-  String _errorMessage(dynamic data, int statusCode) {
-    if (data is Map<String, dynamic>) {
-      return data['msg'] as String? ??
-          data['message'] as String? ??
-          data['error_description'] as String? ??
-          data['error'] as String? ??
-          'Supabase mengembalikan error $statusCode.';
-    }
-
-    return 'Supabase mengembalikan error $statusCode.';
   }
 }

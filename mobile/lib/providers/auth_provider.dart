@@ -130,9 +130,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<AuthResult> signInWithGoogle() async {
-    return AuthResult.failure(
-      'Login Google perlu konfigurasi OAuth Supabase di aplikasi mobile. Gunakan email dan kata sandi dulu.',
-    );
+    state = state.copyWith(isLoading: true);
+
+    try {
+      final session = await _authService.signInWithGoogle();
+      final user = await _syncBackendProfile(session);
+      state = AuthState(currentUser: user);
+      return AuthResult.success(user);
+    } catch (e) {
+      state = state.copyWith(isLoading: false);
+      return AuthResult.failure(_cleanError(e));
+    }
   }
 
   Future<void> logout() async {
@@ -159,11 +167,26 @@ class AuthNotifier extends StateNotifier<AuthState> {
       accessToken: session.accessToken,
       avatarUrl: profile['avatar_url'] as String?,
       bio: profile['bio'] as String?,
+      isGoogleAccount: session.isGoogleAccount,
     );
   }
 
   String _cleanError(Object error) {
+    if (error is AuthException) {
+      if (error.message == 'Invalid login credentials') {
+        return 'Email atau kata sandi salah.';
+      }
+      if (error.message.contains('Email not confirmed')) {
+        return 'Email kamu belum dikonfirmasi. Silakan cek kotak masuk email.';
+      }
+      return error.message;
+    }
+
     final message = error.toString();
+    if (message.contains('Connection refused') || message.contains('Network is unreachable')) {
+      return 'Gagal terhubung ke server. Pastikan kamu terhubung ke internet.';
+    }
+
     return message.startsWith('Exception: ')
         ? message.substring('Exception: '.length)
         : message;

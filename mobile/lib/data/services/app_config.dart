@@ -42,6 +42,12 @@ class AppConfig {
         '';
   }
 
+  static String get googleClientId {
+    return const String.fromEnvironment('GOOGLE_CLIENT_ID').isNotEmpty
+        ? const String.fromEnvironment('GOOGLE_CLIENT_ID')
+        : dotenv.env['GOOGLE_CLIENT_ID'] ?? '';
+  }
+
   static String _withoutTrailingSlash(String value) {
     var trimmed = value.trim().replaceFirst(RegExp(r'/+$'), '');
     if (trimmed.isNotEmpty && !trimmed.contains('://')) {

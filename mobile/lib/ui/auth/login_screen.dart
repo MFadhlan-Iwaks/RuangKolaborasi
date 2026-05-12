@@ -85,9 +85,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final authState = ref.watch(authProvider);
+    final primaryColor = isDark ? AppTheme.blue300 : AppTheme.blue600;
 
     return Scaffold(
-      backgroundColor: isDark ? AppTheme.zinc950_bg : Colors.white,
+      backgroundColor: isDark ? AppTheme.slate950 : Colors.white,
       body: SingleChildScrollView(
         child: Column(
           children: [
@@ -104,7 +105,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
-                      color: isDark ? Colors.white : AppTheme.zinc900,
+                      color: isDark ? Colors.white : AppTheme.slate950,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -112,9 +113,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     _isRegisterMode
                         ? 'Daftar untuk masuk ke workspace tim kamu'
                         : 'Masuk ke workspace tim kamu',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
-                      color: AppTheme.zinc500,
+                      color: isDark ? AppTheme.slate400 : AppTheme.slate500,
                     ),
                   ),
                   const SizedBox(height: 32),
@@ -139,7 +140,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     textInputAction: TextInputAction.next,
                   ),
                   const SizedBox(height: 20),
-                  _buildPasswordLabel(isDark),
+                  _buildPasswordLabel(isDark, primaryColor),
                   _buildTextField(
                     controller: _passwordController,
                     hintText: 'Masukkan kata sandi',
@@ -159,7 +160,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         _obscurePassword
                             ? Icons.visibility_off
                             : Icons.visibility,
-                        color: isDark ? AppTheme.zinc400 : AppTheme.zinc500,
+                        color: isDark ? AppTheme.slate400 : AppTheme.slate500,
                       ),
                     ),
                   ),
@@ -185,7 +186,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           _obscureConfirmPassword
                               ? Icons.visibility_off
                               : Icons.visibility,
-                          color: isDark ? AppTheme.zinc400 : AppTheme.zinc500,
+                          color: isDark ? AppTheme.slate400 : AppTheme.slate500,
                         ),
                       ),
                     ),
@@ -197,20 +198,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     child: ElevatedButton(
                       onPressed: authState.isLoading ? null : _submit,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.indigo600,
-                        foregroundColor: Colors.white,
+                        backgroundColor: primaryColor,
+                        foregroundColor: isDark ? AppTheme.slate950 : Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
                         elevation: 0,
                       ),
                       child: authState.isLoading
-                          ? const SizedBox(
+                          ? SizedBox(
                               width: 20,
                               height: 20,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                color: Colors.white,
+                                color: isDark ? AppTheme.slate950 : Colors.white,
                               ),
                             )
                           : Text(
@@ -234,8 +235,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       style: OutlinedButton.styleFrom(
                         side: BorderSide(
                           color: isDark
-                              ? AppTheme.zinc700
-                              : Colors.grey.shade200,
+                              ? AppTheme.slate700
+                              : AppTheme.slate200,
                         ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
@@ -244,7 +245,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.g_mobiledata, size: 26),
+                          Icon(Icons.g_mobiledata, size: 26, color: primaryColor),
                           const SizedBox(width: 10),
                           Flexible(
                             child: Text(
@@ -253,8 +254,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   : 'Masuk dengan Google',
                               style: TextStyle(
                                 color: isDark
-                                    ? AppTheme.zinc300
-                                    : AppTheme.zinc600,
+                                    ? AppTheme.slate200
+                                    : AppTheme.slate700,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -274,7 +275,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               ? 'Sudah punya akun? '
                               : 'Belum punya akun? ',
                           style: TextStyle(
-                            color: isDark ? AppTheme.zinc500 : AppTheme.zinc400,
+                            color: isDark ? AppTheme.slate400 : AppTheme.slate500,
                             fontSize: 13,
                           ),
                         ),
@@ -284,8 +285,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             _isRegisterMode
                                 ? 'Masuk sekarang'
                                 : 'Daftar sekarang',
-                            style: const TextStyle(
-                              color: AppTheme.indigo600,
+                            style: TextStyle(
+                              color: primaryColor,
                               fontWeight: FontWeight.bold,
                               fontSize: 13,
                             ),
@@ -308,7 +309,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 48),
       decoration: BoxDecoration(
-        color: isDark ? AppTheme.zinc900 : AppTheme.indigo950,
+        color: isDark ? AppTheme.slate900 : AppTheme.slate950,
         borderRadius: const BorderRadius.only(
           bottomLeft: Radius.circular(32),
           bottomRight: Radius.circular(32),
@@ -327,7 +328,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     width: 36,
                     height: 36,
                     decoration: BoxDecoration(
-                      color: AppTheme.indigo600,
+                      color: isDark ? AppTheme.blue300 : AppTheme.blue600,
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: GridView.count(
@@ -392,12 +393,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       style: TextStyle(
         fontSize: 12,
         fontWeight: FontWeight.w600,
-        color: isDark ? AppTheme.zinc300 : AppTheme.zinc600,
+        color: isDark ? AppTheme.slate200 : AppTheme.slate700,
       ),
     );
   }
 
-  Widget _buildPasswordLabel(bool isDark) {
+  Widget _buildPasswordLabel(bool isDark, Color primaryColor) {
     if (_isRegisterMode) return _buildLabel('Kata sandi', isDark);
 
     return Row(
@@ -406,9 +407,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         _buildLabel('Kata sandi', isDark),
         TextButton(
           onPressed: () => _showSnack('Fitur lupa kata sandi belum tersedia.'),
-          child: const Text(
+          child: Text(
             'Lupa kata sandi?',
-            style: TextStyle(fontSize: 12, color: AppTheme.indigo600),
+            style: TextStyle(fontSize: 12, color: primaryColor),
           ),
         ),
       ],
@@ -435,21 +436,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       decoration: InputDecoration(
         hintText: hintText,
         hintStyle: TextStyle(
-          color: isDark ? AppTheme.zinc500 : AppTheme.zinc400,
+          color: isDark ? AppTheme.slate400 : AppTheme.slate500,
         ),
         suffixIcon: suffixIcon,
         filled: true,
-        fillColor: isDark ? AppTheme.zinc800 : AppTheme.zinc50,
+        fillColor: isDark ? AppTheme.slate800 : AppTheme.slate50,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide(
-            color: isDark ? AppTheme.zinc700 : Colors.grey.shade200,
+            color: isDark ? AppTheme.slate700 : AppTheme.slate200,
           ),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide(
-            color: isDark ? AppTheme.zinc700 : Colors.grey.shade200,
+            color: isDark ? AppTheme.slate700 : AppTheme.slate200,
           ),
         ),
       ),
@@ -461,7 +462,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       children: [
         Expanded(
           child: Divider(
-            color: isDark ? AppTheme.zinc700 : Colors.grey.shade200,
+            color: isDark ? AppTheme.slate700 : AppTheme.slate200,
           ),
         ),
         Padding(
@@ -469,14 +470,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           child: Text(
             'atau',
             style: TextStyle(
-              color: isDark ? AppTheme.zinc500 : AppTheme.zinc400,
+              color: isDark ? AppTheme.slate400 : AppTheme.slate500,
               fontSize: 12,
             ),
           ),
         ),
         Expanded(
           child: Divider(
-            color: isDark ? AppTheme.zinc700 : Colors.grey.shade200,
+            color: isDark ? AppTheme.slate700 : AppTheme.slate200,
           ),
         ),
       ],

@@ -239,7 +239,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
       uiSettings: [
         AndroidUiSettings(
           toolbarTitle: 'Sesuaikan Wallpaper',
-          toolbarColor: isDark ? AppTheme.zinc900 : AppTheme.indigo600,
+          toolbarColor: isDark ? AppTheme.slate900 : AppTheme.indigo600,
           toolbarWidgetColor: Colors.white,
           initAspectRatio: CropAspectRatioPreset.original,
           lockAspectRatio: false,
@@ -329,7 +329,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     showModalBottomSheet(
       context: context,
-      backgroundColor: isDark ? AppTheme.zinc900 : Colors.white,
+      backgroundColor: isDark ? AppTheme.slate900 : Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -481,9 +481,9 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
     final memberCount = workspaceState.activeMembers.length;
 
     return Scaffold(
-      backgroundColor: isDark ? AppTheme.zinc950_bg : Colors.white,
+      backgroundColor: isDark ? AppTheme.slate950 : Colors.white,
       appBar: AppBar(
-        backgroundColor: isDark ? AppTheme.zinc900 : Colors.white,
+        backgroundColor: isDark ? AppTheme.slate950 : Colors.white,
         title: _isSearching
             ? TextField(
                 controller: _searchController,
@@ -494,7 +494,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                   border: InputBorder.none,
                   hintStyle: TextStyle(
                     fontSize: 14,
-                    color: isDark ? AppTheme.zinc500 : AppTheme.zinc400,
+                    color: isDark ? AppTheme.slate400 : AppTheme.slate500,
                   ),
                 ),
                 onChanged: (value) {
@@ -516,7 +516,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                         : '$memberCount anggota di workspace ini',
                     style: TextStyle(
                       fontSize: 10,
-                      color: isDark ? AppTheme.zinc400 : AppTheme.zinc500,
+                      color: isDark ? AppTheme.slate400 : AppTheme.slate500,
                     ),
                   ),
                 ],
@@ -539,7 +539,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
           else ...[
             IconButton(
               onPressed: _showSummary,
-              icon: const Icon(LucideIcons.sparkles, color: AppTheme.indigo600),
+              icon: const Icon(LucideIcons.sparkles, color: AppTheme.blue300),
               tooltip: 'Rangkum Diskusi',
             ),
             IconButton(
@@ -554,13 +554,6 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
               ),
             ),
           ],
-          IconButton(
-            onPressed: () {},
-            icon: Icon(
-              LucideIcons.moreVertical,
-              color: isDark ? Colors.white : Colors.black,
-            ),
-          ),
         ],
       ),
       drawer: _buildDrawer(isDark),
@@ -586,11 +579,11 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
           children: [
             if (workspaceState.error != null)
               MaterialBanner(
-                backgroundColor: isDark ? AppTheme.zinc900 : AppTheme.indigo50,
+                backgroundColor: isDark ? AppTheme.slate900 : AppTheme.indigo50,
                 content: Text(
                   workspaceState.error!,
                   style: TextStyle(
-                    color: isDark ? Colors.white : AppTheme.zinc900,
+                    color: isDark ? Colors.white : AppTheme.slate950,
                   ),
                 ),
                 actions: [
@@ -611,7 +604,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                             ? 'Belum ada channel di workspace ini.'
                             : 'Belum ada pesan di ${activeChannel.name}.',
                         style: TextStyle(
-                          color: isDark ? Colors.white70 : AppTheme.zinc500,
+                          color: isDark ? Colors.white70 : AppTheme.slate500,
                         ),
                       ),
                     )
@@ -637,7 +630,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                   vertical: 8,
                 ),
                 color: isDark
-                    ? AppTheme.indigo950.withOpacity(0.3)
+                    ? AppTheme.slate900.withOpacity(0.5)
                     : AppTheme.indigo50,
                 child: Row(
                   children: [
@@ -683,13 +676,13 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
     final activeWorkspace = workspaceState.activeWorkspace;
 
     return Drawer(
-      backgroundColor: isDark ? AppTheme.zinc900 : Colors.white,
+      backgroundColor: isDark ? AppTheme.slate900 : Colors.white,
       child: Column(
         children: [
           Container(
             width: double.infinity,
             padding: const EdgeInsets.fromLTRB(20, 48, 20, 20),
-            decoration: const BoxDecoration(color: AppTheme.indigo950),
+            decoration: const BoxDecoration(color: AppTheme.slate950),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -729,7 +722,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
-                            color: isDark ? AppTheme.zinc500 : AppTheme.zinc400,
+                            color: isDark ? AppTheme.slate400 : AppTheme.slate500,
                           ),
                         ),
                       ),
@@ -740,7 +733,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                         icon: Icon(
                           LucideIcons.refreshCw,
                           size: 16,
-                          color: isDark ? Colors.white70 : AppTheme.zinc700,
+                          color: isDark ? Colors.white70 : AppTheme.slate700,
                         ),
                       ),
                     ],
@@ -750,13 +743,13 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                   ListTile(
                     leading: CircleAvatar(
                       radius: 14,
-                      backgroundColor: AppTheme.indigo600,
+                      backgroundColor: isDark ? AppTheme.blue300 : AppTheme.indigo600,
                       child: Text(
                         workspace.shortName.isEmpty
                             ? _profileInitials(workspace.name)
                             : workspace.shortName,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: isDark ? AppTheme.slate950 : Colors.white,
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
                         ),
@@ -772,7 +765,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                     ),
                     selected: workspace.id == workspaceState.activeWorkspaceId,
                     selectedTileColor: isDark
-                        ? AppTheme.indigo600.withOpacity(0.2)
+                        ? AppTheme.blue300.withOpacity(0.1)
                         : AppTheme.indigo50,
                     onTap: () {
                       ref
@@ -801,7 +794,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
-                            color: isDark ? AppTheme.zinc500 : AppTheme.zinc400,
+                            color: isDark ? AppTheme.slate400 : AppTheme.slate500,
                           ),
                         ),
                       ),
@@ -811,7 +804,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                         icon: Icon(
                           LucideIcons.plus,
                           size: 18,
-                          color: isDark ? Colors.white70 : AppTheme.zinc700,
+                          color: isDark ? Colors.white70 : AppTheme.slate700,
                         ),
                       ),
                     ],
@@ -841,13 +834,13 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               color: isDark
-                                  ? AppTheme.zinc500
-                                  : AppTheme.zinc500,
+                                  ? AppTheme.slate400
+                                  : AppTheme.slate500,
                             ),
                           ),
                     selected: channel.id == workspaceState.activeChannelId,
                     selectedTileColor: isDark
-                        ? AppTheme.indigo600.withOpacity(0.2)
+                        ? AppTheme.blue300.withOpacity(0.1)
                         : AppTheme.indigo50,
                     onTap: () {
                       ref
@@ -867,7 +860,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
-                      color: isDark ? AppTheme.zinc500 : AppTheme.zinc400,
+                      color: isDark ? AppTheme.slate400 : AppTheme.slate500,
                     ),
                   ),
                 ),
@@ -885,7 +878,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                     subtitle: Text(
                       member.role,
                       style: TextStyle(
-                        color: isDark ? AppTheme.zinc500 : AppTheme.zinc500,
+                        color: isDark ? AppTheme.slate400 : AppTheme.slate500,
                       ),
                     ),
                   ),
@@ -926,14 +919,14 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
       children: [
         CircleAvatar(
           radius: 14,
-          backgroundColor: AppTheme.indigo600,
+          backgroundColor: isDark ? AppTheme.blue300 : AppTheme.indigo600,
           backgroundImage: imageProvider,
           child: imageProvider == null
               ? Text(
                   _profileInitials(displayName),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 10,
-                    color: Colors.white,
+                    color: isDark ? AppTheme.slate950 : Colors.white,
                     fontWeight: FontWeight.bold,
                   ),
                 )
@@ -944,7 +937,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
           bottom: -1,
           child: _buildStatusBadge(
             status,
-            borderColor: isDark ? AppTheme.zinc900 : Colors.white,
+            borderColor: isDark ? AppTheme.slate900 : Colors.white,
             size: 10,
             borderWidth: 2,
           ),
@@ -995,16 +988,16 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
   }
 
   Widget _buildProfilePanel(UserState user, bool isDark) {
-    final panelColor = isDark ? AppTheme.zinc800 : AppTheme.zinc100;
-    final textColor = isDark ? Colors.white : AppTheme.zinc900;
-    final mutedColor = isDark ? AppTheme.zinc400 : AppTheme.zinc600;
+    final panelColor = isDark ? AppTheme.slate800 : AppTheme.slate50;
+    final textColor = isDark ? Colors.white : AppTheme.slate950;
+    final mutedColor = isDark ? AppTheme.slate400 : AppTheme.slate500;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 8, 12),
       decoration: BoxDecoration(
         color: panelColor,
         border: Border(
-          top: BorderSide(color: isDark ? AppTheme.zinc700 : AppTheme.zinc200),
+          top: BorderSide(color: isDark ? AppTheme.slate700 : AppTheme.slate200),
         ),
       ),
       child: SafeArea(
@@ -1086,7 +1079,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
               onPressed: () => _showSettingsOptions(isDark),
               icon: Icon(
                 LucideIcons.settings,
-                color: isDark ? AppTheme.zinc300 : AppTheme.zinc700,
+                color: isDark ? AppTheme.slate300 : AppTheme.slate700,
               ),
             ),
           ],
@@ -1098,6 +1091,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
   Widget _buildProfileAvatar(UserState user, {required double radius}) {
     final photoPath = user.photoPath;
     final avatarUrl = user.avatarUrl;
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
     ImageProvider? imageProvider;
     if (photoPath != null) {
@@ -1117,13 +1111,13 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
 
     return CircleAvatar(
       radius: radius,
-      backgroundColor: AppTheme.indigo600,
+      backgroundColor: isDark ? AppTheme.blue300 : AppTheme.indigo600,
       backgroundImage: imageProvider,
       child: imageProvider == null
           ? Text(
               _profileInitials(user.name),
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: isDark ? AppTheme.slate950 : Colors.white,
                 fontWeight: FontWeight.bold,
               ),
             )
@@ -1147,7 +1141,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
   void _showSettingsOptions(bool isDark) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: isDark ? AppTheme.zinc900 : Colors.white,
+      backgroundColor: isDark ? AppTheme.slate900 : Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -1163,7 +1157,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                   children: [
                     Icon(
                       LucideIcons.settings,
-                      color: isDark ? Colors.white70 : AppTheme.zinc700,
+                      color: isDark ? Colors.white70 : AppTheme.slate700,
                     ),
                     const SizedBox(width: 8),
                     Text(
@@ -1180,7 +1174,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
               ListTile(
                 leading: Icon(
                   LucideIcons.userCog,
-                  color: isDark ? Colors.white70 : AppTheme.indigo600,
+                  color: isDark ? Colors.white70 : AppTheme.blue600,
                 ),
                 title: Text(
                   'Edit Profile',
@@ -1194,7 +1188,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
               ListTile(
                 leading: Icon(
                   isDark ? Icons.light_mode : Icons.dark_mode,
-                  color: isDark ? Colors.amber : AppTheme.indigo600,
+                  color: isDark ? Colors.amber : AppTheme.blue600,
                 ),
                 title: Text(
                   isDark ? 'Mode Terang' : 'Mode Gelap',
@@ -1208,7 +1202,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
               ListTile(
                 leading: Icon(
                   LucideIcons.image,
-                  color: isDark ? Colors.white70 : AppTheme.indigo600,
+                  color: isDark ? Colors.white70 : AppTheme.blue600,
                 ),
                 title: Text(
                   'Ganti Wallpaper',
@@ -1238,7 +1232,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
   void _showWorkspaceAccessOptions(bool isDark) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: isDark ? AppTheme.zinc900 : Colors.white,
+      backgroundColor: isDark ? AppTheme.slate900 : Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -1254,7 +1248,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                   children: [
                     Icon(
                       LucideIcons.building2,
-                      color: isDark ? Colors.white70 : AppTheme.zinc700,
+                      color: isDark ? Colors.white70 : AppTheme.slate700,
                     ),
                     const SizedBox(width: 8),
                     Text(
@@ -1277,7 +1271,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                 subtitle: Text(
                   'Mulai diskusi baru di workspace ini',
                   style: TextStyle(
-                    color: isDark ? AppTheme.zinc500 : AppTheme.zinc500,
+                    color: isDark ? AppTheme.slate400 : AppTheme.slate500,
                     fontSize: 12,
                   ),
                 ),
@@ -1295,7 +1289,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                 subtitle: Text(
                   'Mulai workspace baru untuk tim kamu',
                   style: TextStyle(
-                    color: isDark ? AppTheme.zinc500 : AppTheme.zinc500,
+                    color: isDark ? AppTheme.slate400 : AppTheme.slate500,
                     fontSize: 12,
                   ),
                 ),
@@ -1305,7 +1299,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                 },
               ),
               ListTile(
-                leading: const Icon(LucideIcons.logIn, color: AppTheme.indigo600),
+                leading: const Icon(LucideIcons.logIn, color: AppTheme.blue600),
                 title: Text(
                   'Join Grup',
                   style: TextStyle(color: isDark ? Colors.white : Colors.black),
@@ -1313,7 +1307,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                 subtitle: Text(
                   'Gunakan kode invite untuk bergabung',
                   style: TextStyle(
-                    color: isDark ? AppTheme.zinc500 : AppTheme.zinc500,
+                    color: isDark ? AppTheme.slate400 : AppTheme.slate500,
                     fontSize: 12,
                   ),
                 ),
@@ -1336,7 +1330,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: isDark ? AppTheme.zinc900 : Colors.white,
+        backgroundColor: isDark ? AppTheme.slate900 : Colors.white,
         title: const Text('Buat Grup Baru'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1389,7 +1383,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: isDark ? AppTheme.zinc900 : Colors.white,
+        backgroundColor: isDark ? AppTheme.slate900 : Colors.white,
         title: const Text('Join Grup'),
         content: TextField(
           controller: controller,
@@ -1434,7 +1428,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: isDark ? AppTheme.zinc900 : Colors.white,
+        backgroundColor: isDark ? AppTheme.slate900 : Colors.white,
         title: const Text('Hapus Workspace'),
         content: Text(
           'Apakah kamu yakin ingin menghapus workspace "${workspace.name}"? '
@@ -1474,7 +1468,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: isDark ? AppTheme.zinc900 : Colors.white,
+        backgroundColor: isDark ? AppTheme.slate900 : Colors.white,
         title: Text(
           'Group chat baru',
           style: TextStyle(color: isDark ? Colors.white : Colors.black),
@@ -1516,7 +1510,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: isDark ? AppTheme.zinc900 : Colors.white,
+      backgroundColor: isDark ? AppTheme.slate900 : Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -1528,7 +1522,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
   void _showStatusOptions(bool isDark) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: isDark ? AppTheme.zinc900 : Colors.white,
+      backgroundColor: isDark ? AppTheme.slate900 : Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -1568,7 +1562,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
     return ListTile(
       leading: _buildStatusBadge(
         status,
-        borderColor: isDark ? AppTheme.zinc900 : Colors.white,
+        borderColor: isDark ? AppTheme.slate900 : Colors.white,
       ),
       title: Text(
         _statusLabel(status),
@@ -1576,10 +1570,10 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
       ),
       subtitle: Text(
         _statusDescription(status),
-        style: TextStyle(color: isDark ? AppTheme.zinc400 : AppTheme.zinc500),
+        style: TextStyle(color: isDark ? AppTheme.slate400 : AppTheme.slate500),
       ),
       trailing: currentStatus == status
-          ? const Icon(LucideIcons.check, color: AppTheme.indigo600)
+          ? const Icon(LucideIcons.check, color: AppTheme.blue600)
           : null,
       onTap: () {
         ref.read(userProvider.notifier).setStatus(status);
@@ -1597,7 +1591,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
       case UserStatus.dnd:
         return Colors.red;
       case UserStatus.invisible:
-        return AppTheme.zinc500;
+        return AppTheme.slate500;
     }
   }
 
@@ -1684,10 +1678,10 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
       return Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: isDark ? AppTheme.zinc900 : Colors.white,
+          color: isDark ? AppTheme.slate900 : Colors.white,
           border: Border(
             top: BorderSide(
-              color: isDark ? AppTheme.zinc800 : Colors.grey.shade100,
+              color: isDark ? AppTheme.slate800 : Colors.grey.shade100,
             ),
           ),
         ),
@@ -1706,11 +1700,11 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
             ),
             IconButton(
               onPressed: _cancelRecording,
-              icon: const Icon(LucideIcons.trash2, color: AppTheme.zinc500),
+              icon: const Icon(LucideIcons.trash2, color: AppTheme.slate500),
             ),
             IconButton(
               onPressed: _stopRecording,
-              icon: const Icon(LucideIcons.send, color: AppTheme.indigo600),
+              icon: Icon(LucideIcons.send, color: isDark ? AppTheme.blue300 : AppTheme.blue600),
             ),
           ],
         ),
@@ -1720,10 +1714,10 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark ? AppTheme.zinc900 : Colors.white,
+        color: isDark ? AppTheme.slate900 : Colors.white,
         border: Border(
           top: BorderSide(
-            color: isDark ? AppTheme.zinc800 : Colors.grey.shade100,
+            color: isDark ? AppTheme.slate800 : Colors.grey.shade100,
           ),
         ),
       ),
@@ -1731,16 +1725,16 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
         children: [
           IconButton(
             onPressed: _showAttachmentOptions,
-            icon: const Icon(LucideIcons.paperclip, color: AppTheme.zinc500),
+            icon: const Icon(LucideIcons.paperclip, color: AppTheme.slate500),
           ),
           Expanded(
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               decoration: BoxDecoration(
-                color: isDark ? AppTheme.zinc800 : AppTheme.zinc50,
+                color: isDark ? AppTheme.slate800 : AppTheme.slate50,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: isDark ? AppTheme.zinc700 : Colors.grey.shade200,
+                  color: isDark ? AppTheme.slate700 : Colors.grey.shade200,
                 ),
               ),
               child: TextField(
@@ -1749,7 +1743,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                 decoration: InputDecoration(
                   hintText: 'Ketik pesan...',
                   hintStyle: TextStyle(
-                    color: isDark ? AppTheme.zinc500 : AppTheme.zinc400,
+                    color: isDark ? AppTheme.slate400 : AppTheme.slate500,
                   ),
                   border: InputBorder.none,
                 ),
@@ -1760,21 +1754,11 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
               ),
             ),
           ),
-          IconButton(
-            onPressed: isPolishing ? null : _handlePolish,
-            icon: isPolishing
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(LucideIcons.sparkles, color: AppTheme.indigo600),
-          ),
           if (_messageController.text.trim().isEmpty &&
               _editingMessageId == null)
             IconButton(
               onPressed: _startRecording,
-              icon: const Icon(LucideIcons.mic, color: AppTheme.indigo600),
+              icon: Icon(LucideIcons.mic, color: isDark ? AppTheme.blue300 : AppTheme.blue600),
             )
           else
             IconButton(
@@ -1785,7 +1769,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                 _editingMessageId != null
                     ? LucideIcons.check
                     : LucideIcons.send,
-                color: AppTheme.indigo600,
+                color: isDark ? AppTheme.blue300 : AppTheme.blue600,
               ),
             ),
         ],
@@ -1863,9 +1847,9 @@ class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
   Widget build(BuildContext context) {
     final isDark = widget.isDark;
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    final textColor = isDark ? Colors.white : AppTheme.zinc900;
-    final fillColor = isDark ? AppTheme.zinc800 : AppTheme.zinc50;
-    final borderColor = isDark ? AppTheme.zinc700 : AppTheme.zinc200;
+    final textColor = isDark ? Colors.white : AppTheme.slate950;
+    final fillColor = isDark ? AppTheme.slate800 : AppTheme.slate50;
+    final borderColor = isDark ? AppTheme.slate700 : AppTheme.slate200;
 
     return Padding(
       padding: EdgeInsets.only(bottom: bottomInset),
@@ -1881,7 +1865,7 @@ class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
                 children: [
                   Icon(
                     LucideIcons.userCog,
-                    color: isDark ? Colors.white70 : AppTheme.zinc700,
+                    color: isDark ? Colors.white70 : AppTheme.slate700,
                   ),
                   const SizedBox(width: 8),
                   Text(
@@ -1897,7 +1881,7 @@ class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
                     onPressed: () => Navigator.of(context).pop(),
                     icon: Icon(
                       LucideIcons.x,
-                      color: isDark ? Colors.white70 : AppTheme.zinc700,
+                      color: isDark ? Colors.white70 : AppTheme.slate700,
                     ),
                   ),
                 ],
@@ -1911,15 +1895,15 @@ class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
                       children: [
                         CircleAvatar(
                           radius: 42,
-                          backgroundColor: AppTheme.indigo600,
+                          backgroundColor: isDark ? AppTheme.blue300 : AppTheme.indigo600,
                           backgroundImage: _selectedPhotoPath == null
                               ? null
                               : FileImage(File(_selectedPhotoPath!)),
                           child: _selectedPhotoPath == null
                               ? Text(
                                   _profileInitials(_nameController.text),
-                                  style: const TextStyle(
-                                    color: Colors.white,
+                                  style: TextStyle(
+                                    color: isDark ? AppTheme.slate950 : Colors.white,
                                     fontSize: 22,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -1931,8 +1915,8 @@ class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
                           bottom: -4,
                           child: IconButton.filled(
                             style: IconButton.styleFrom(
-                              backgroundColor: AppTheme.indigo600,
-                              foregroundColor: Colors.white,
+                              backgroundColor: isDark ? AppTheme.blue300 : AppTheme.indigo600,
+                              foregroundColor: isDark ? AppTheme.slate950 : Colors.white,
                             ),
                             onPressed: _pickProfilePhoto,
                             icon: const Icon(LucideIcons.camera, size: 18),
@@ -1965,7 +1949,7 @@ class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
                 decoration: InputDecoration(
                   hintText: 'Nama yang tampil di workspace',
                   hintStyle: TextStyle(
-                    color: isDark ? AppTheme.zinc500 : AppTheme.zinc400,
+                    color: isDark ? AppTheme.slate400 : AppTheme.slate500,
                   ),
                   filled: true,
                   fillColor: fillColor,
@@ -2000,7 +1984,7 @@ class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
                   hintText:
                       'Tulis bio, emote, simbol spesial, atau info singkat kamu...',
                   hintStyle: TextStyle(
-                    color: isDark ? AppTheme.zinc500 : AppTheme.zinc400,
+                    color: isDark ? AppTheme.slate400 : AppTheme.slate500,
                   ),
                   alignLabelWithHint: true,
                   filled: true,
@@ -2022,8 +2006,8 @@ class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
                 child: ElevatedButton(
                   onPressed: _saveProfile,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.indigo600,
-                    foregroundColor: Colors.white,
+                    backgroundColor: isDark ? AppTheme.blue300 : AppTheme.indigo600,
+                    foregroundColor: isDark ? AppTheme.slate950 : Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
@@ -2064,7 +2048,7 @@ class _MessageBubble extends ConsumerWidget {
   void _showMenu(BuildContext context, WidgetRef ref, bool isMe, bool isDark) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: isDark ? AppTheme.zinc900 : Colors.white,
+      backgroundColor: isDark ? AppTheme.slate900 : Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -2171,7 +2155,7 @@ class _MessageBubble extends ConsumerWidget {
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
-                          color: isDark ? AppTheme.indigo600 : AppTheme.indigo600,
+                          color: isDark ? AppTheme.blue300 : AppTheme.blue600,
                         ),
                       ),
                     ),
@@ -2179,8 +2163,8 @@ class _MessageBubble extends ConsumerWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
                       color: isMe
-                          ? AppTheme.indigo600
-                          : (isDark ? AppTheme.zinc800 : Colors.white),
+                          ? (isDark ? AppTheme.blue300 : AppTheme.blue600)
+                          : (isDark ? AppTheme.slate800 : Colors.white),
                       borderRadius: BorderRadius.only(
                         topLeft: const Radius.circular(16),
                         topRight: const Radius.circular(16),
@@ -2195,7 +2179,7 @@ class _MessageBubble extends ConsumerWidget {
                         ),
                       ],
                       border: !isMe && !isDark
-                          ? Border.all(color: AppTheme.zinc100)
+                          ? Border.all(color: AppTheme.slate200)
                           : null,
                     ),
                     child: Column(
@@ -2211,8 +2195,8 @@ class _MessageBubble extends ConsumerWidget {
                               style: TextStyle(
                                 fontSize: 10,
                                 color: isMe
-                                    ? Colors.white.withOpacity(0.7)
-                                    : (isDark ? AppTheme.zinc500 : AppTheme.zinc400),
+                                    ? (isDark ? AppTheme.slate950 : Colors.white.withOpacity(0.7))
+                                    : (isDark ? AppTheme.slate400 : AppTheme.slate500),
                               ),
                             ),
                             if (message.isEdited) ...[
@@ -2223,8 +2207,8 @@ class _MessageBubble extends ConsumerWidget {
                                   fontSize: 10,
                                   fontStyle: FontStyle.italic,
                                   color: isMe
-                                      ? Colors.white.withOpacity(0.7)
-                                      : (isDark ? AppTheme.zinc500 : AppTheme.zinc400),
+                                      ? (isDark ? AppTheme.slate950 : Colors.white.withOpacity(0.7))
+                                      : (isDark ? AppTheme.slate400 : AppTheme.slate500),
                                 ),
                               ),
                             ],
@@ -2233,7 +2217,7 @@ class _MessageBubble extends ConsumerWidget {
                               Icon(
                                 Icons.done_all,
                                 size: 12,
-                                color: Colors.white.withOpacity(0.7),
+                                color: isDark ? AppTheme.slate950 : Colors.white.withOpacity(0.7),
                               ),
                             ],
                           ],
@@ -2295,7 +2279,7 @@ class _MessageBubble extends ConsumerWidget {
       children: [
         CircleAvatar(
           radius: 16,
-          backgroundColor: AppTheme.indigo600,
+          backgroundColor: AppTheme.blue600,
           backgroundImage: imageProvider,
           child: imageProvider == null
               ? Text(
@@ -2346,10 +2330,10 @@ class _MessageBubble extends ConsumerWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: isDark ? AppTheme.zinc800 : AppTheme.zinc100,
+            color: isDark ? AppTheme.slate800 : AppTheme.slate50,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: isDark ? AppTheme.zinc700 : AppTheme.zinc200,
+              color: isDark ? AppTheme.slate700 : AppTheme.slate200,
             ),
           ),
           child: Row(
@@ -2358,13 +2342,13 @@ class _MessageBubble extends ConsumerWidget {
               Icon(
                 LucideIcons.ban,
                 size: 14,
-                color: isDark ? AppTheme.zinc500 : AppTheme.zinc400,
+                color: isDark ? AppTheme.slate400 : AppTheme.slate500,
               ),
               const SizedBox(width: 8),
               Text(
                 'Pesan ini telah dihapus',
                 style: TextStyle(
-                  color: isDark ? AppTheme.zinc500 : AppTheme.zinc400,
+                  color: isDark ? AppTheme.slate400 : AppTheme.slate500,
                   fontSize: 12,
                   fontStyle: FontStyle.italic,
                 ),
@@ -2383,16 +2367,16 @@ class _MessageBubble extends ConsumerWidget {
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: isMe
-                ? AppTheme.indigo600
-                : (isDark ? AppTheme.zinc800 : AppTheme.zinc50),
+                ? (isDark ? AppTheme.blue300 : AppTheme.blue600)
+                : (isDark ? AppTheme.slate800 : AppTheme.slate50),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Text(
             message.text ?? '',
             style: TextStyle(
               color: isMe
-                  ? Colors.white
-                  : (isDark ? Colors.white : AppTheme.zinc900),
+                  ? (isDark ? AppTheme.slate950 : Colors.white)
+                  : (isDark ? Colors.white : AppTheme.slate950),
               fontSize: 14,
             ),
           ),
@@ -2415,7 +2399,7 @@ class _MessageBubble extends ConsumerWidget {
                           placeholder: (c, url) => Container(
                             width: 200,
                             height: 200,
-                            color: isDark ? AppTheme.zinc800 : AppTheme.zinc100,
+                            color: isDark ? AppTheme.slate800 : AppTheme.slate50,
                             child: const Center(
                               child: CircularProgressIndicator(),
                             ),
@@ -2423,7 +2407,7 @@ class _MessageBubble extends ConsumerWidget {
                           errorWidget: (c, url, error) => Container(
                             width: 200,
                             height: 200,
-                            color: isDark ? AppTheme.zinc800 : AppTheme.zinc100,
+                            color: isDark ? AppTheme.slate800 : AppTheme.slate50,
                             child: const Icon(LucideIcons.imageOff),
                           ),
                         )
@@ -2436,7 +2420,7 @@ class _MessageBubble extends ConsumerWidget {
                 : Container(
                     width: 200,
                     height: 200,
-                    color: isDark ? AppTheme.zinc800 : AppTheme.zinc100,
+                    color: isDark ? AppTheme.slate800 : AppTheme.slate50,
                     child: const Icon(LucideIcons.image),
                   ),
           ),
@@ -2477,8 +2461,8 @@ class _MessageBubble extends ConsumerWidget {
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: isMe
-                  ? AppTheme.indigo600
-                  : (isDark ? AppTheme.zinc800 : AppTheme.zinc50),
+                  ? (isDark ? AppTheme.blue300 : AppTheme.blue600)
+                  : (isDark ? AppTheme.slate800 : AppTheme.slate50),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
@@ -2486,7 +2470,9 @@ class _MessageBubble extends ConsumerWidget {
               children: [
                 Icon(
                   _getIconForType(message.type),
-                  color: isMe ? Colors.white : AppTheme.indigo600,
+                  color: isMe
+                      ? (isDark ? AppTheme.slate950 : Colors.white)
+                      : (isDark ? AppTheme.blue300 : AppTheme.blue600),
                 ),
                 const SizedBox(width: 12),
                 Flexible(
@@ -2497,8 +2483,8 @@ class _MessageBubble extends ConsumerWidget {
                         message.fileName ?? 'File',
                         style: TextStyle(
                           color: isMe
-                              ? Colors.white
-                              : (isDark ? Colors.white : AppTheme.zinc900),
+                              ? (isDark ? AppTheme.slate950 : Colors.white)
+                              : (isDark ? Colors.white : AppTheme.slate950),
                           fontWeight: FontWeight.bold,
                           fontSize: 13,
                         ),
@@ -2509,10 +2495,10 @@ class _MessageBubble extends ConsumerWidget {
                           message.fileSize!,
                           style: TextStyle(
                             color: isMe
-                                ? Colors.white70
+                                ? (isDark ? AppTheme.slate950.withOpacity(0.7) : Colors.white70)
                                 : (isDark
-                                      ? AppTheme.zinc500
-                                      : AppTheme.zinc500),
+                                      ? AppTheme.slate400
+                                      : AppTheme.slate500),
                             fontSize: 11,
                           ),
                         ),
@@ -2708,7 +2694,7 @@ class _VideoMessageState extends State<VideoMessage>
         width: 150,
         height: 150,
         decoration: BoxDecoration(
-          color: isDark ? AppTheme.zinc800 : Colors.black12,
+          color: isDark ? AppTheme.slate800 : Colors.black12,
           borderRadius: BorderRadius.circular(12),
         ),
         child: const Center(child: CircularProgressIndicator()),
@@ -2788,7 +2774,7 @@ class _SummaryBottomSheet extends ConsumerWidget {
     return Container(
       height: MediaQuery.of(context).size.height * 0.7,
       decoration: BoxDecoration(
-        color: isDark ? AppTheme.zinc900 : Colors.white,
+        color: isDark ? AppTheme.slate900 : Colors.white,
         borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(24),
           topRight: Radius.circular(24),
@@ -2801,7 +2787,7 @@ class _SummaryBottomSheet extends ConsumerWidget {
             decoration: BoxDecoration(
               border: Border(
                 bottom: BorderSide(
-                  color: isDark ? AppTheme.zinc800 : AppTheme.zinc100,
+                  color: isDark ? AppTheme.slate800 : AppTheme.slate100,
                 ),
               ),
             ),
@@ -2810,7 +2796,7 @@ class _SummaryBottomSheet extends ConsumerWidget {
               children: [
                 Row(
                   children: [
-                    const Icon(LucideIcons.sparkles, color: AppTheme.indigo600),
+                    Icon(LucideIcons.sparkles, color: isDark ? AppTheme.blue300 : AppTheme.blue600),
                     const SizedBox(width: 8),
                     Text(
                       'Rangkuman Diskusi',
@@ -2855,7 +2841,7 @@ class _SummaryBottomSheet extends ConsumerWidget {
                       geminiState.summaryResult,
                       style: TextStyle(
                         fontSize: 14,
-                        color: isDark ? Colors.white : AppTheme.zinc900,
+                        color: isDark ? Colors.white : AppTheme.slate950,
                         height: 1.5,
                       ),
                     ),
@@ -2869,8 +2855,8 @@ class _SummaryBottomSheet extends ConsumerWidget {
               child: ElevatedButton(
                 onPressed: () => Navigator.pop(context),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.indigo600,
-                  foregroundColor: Colors.white,
+                  backgroundColor: isDark ? AppTheme.blue300 : AppTheme.blue600,
+                  foregroundColor: isDark ? AppTheme.slate950 : Colors.white,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -2999,8 +2985,8 @@ class _AudioMessageState extends State<AudioMessage>
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: widget.isMe
-            ? AppTheme.indigo600.withOpacity(0.9)
-            : (isDark ? AppTheme.zinc800 : AppTheme.zinc100),
+            ? (isDark ? AppTheme.blue300 : AppTheme.blue600).withOpacity(0.9)
+            : (isDark ? AppTheme.slate800 : AppTheme.slate50),
         borderRadius: BorderRadius.only(
           topLeft: const Radius.circular(16),
           topRight: const Radius.circular(16),
@@ -3019,7 +3005,9 @@ class _AudioMessageState extends State<AudioMessage>
                     width: 44,
                     height: 44,
                     decoration: BoxDecoration(
-                      color: widget.isMe ? Colors.white24 : AppTheme.indigo600.withOpacity(0.1),
+                      color: widget.isMe
+                          ? (isDark ? AppTheme.slate950.withOpacity(0.2) : Colors.white24)
+                          : (isDark ? AppTheme.blue300.withOpacity(0.1) : AppTheme.blue600.withOpacity(0.1)),
                       shape: BoxShape.circle,
                     ),
                     child: Center(
@@ -3031,12 +3019,16 @@ class _AudioMessageState extends State<AudioMessage>
                                 height: 20,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  color: widget.isMe ? Colors.white : AppTheme.indigo600,
+                                  color: widget.isMe
+                                      ? (isDark ? AppTheme.slate950 : Colors.white)
+                                      : (isDark ? AppTheme.blue300 : AppTheme.blue600),
                                 ),
                               )
                             : Icon(
                                 _isPlaying ? LucideIcons.pause : LucideIcons.play,
-                                color: widget.isMe ? Colors.white : AppTheme.indigo600,
+                                color: widget.isMe
+                                    ? (isDark ? AppTheme.slate950 : Colors.white)
+                                    : (isDark ? AppTheme.blue300 : AppTheme.blue600),
                                 size: 24,
                               ),
                       ),
@@ -3048,13 +3040,17 @@ class _AudioMessageState extends State<AudioMessage>
                     child: Container(
                       padding: const EdgeInsets.all(2),
                       decoration: BoxDecoration(
-                        color: widget.isMe ? AppTheme.indigo700 : Colors.white,
+                        color: widget.isMe
+                            ? (isDark ? AppTheme.slate900 : AppTheme.blue600.withOpacity(0.8))
+                            : (isDark ? AppTheme.slate950 : Colors.white),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
                         LucideIcons.mic,
                         size: 10,
-                        color: widget.isMe ? Colors.white : AppTheme.indigo600,
+                        color: widget.isMe
+                            ? (isDark ? AppTheme.blue300 : Colors.white)
+                            : (isDark ? AppTheme.blue300 : AppTheme.blue600),
                       ),
                     ),
                   ),
@@ -3070,9 +3066,15 @@ class _AudioMessageState extends State<AudioMessage>
                         trackHeight: 2,
                         thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
                         overlayShape: const RoundSliderOverlayShape(overlayRadius: 10),
-                        activeTrackColor: widget.isMe ? Colors.white : AppTheme.indigo600,
-                        inactiveTrackColor: widget.isMe ? Colors.white24 : AppTheme.zinc300,
-                        thumbColor: widget.isMe ? Colors.white : AppTheme.indigo600,
+                        activeTrackColor: widget.isMe
+                            ? (isDark ? AppTheme.slate950 : Colors.white)
+                            : (isDark ? AppTheme.blue300 : AppTheme.blue600),
+                        inactiveTrackColor: widget.isMe
+                            ? (isDark ? AppTheme.slate950.withOpacity(0.2) : Colors.white24)
+                            : (isDark ? AppTheme.slate700 : AppTheme.slate200),
+                        thumbColor: widget.isMe
+                            ? (isDark ? AppTheme.slate950 : Colors.white)
+                            : (isDark ? AppTheme.blue300 : AppTheme.blue600),
                       ),
                       child: Slider(
                         value: _position.inSeconds.toDouble(),
@@ -3093,14 +3095,18 @@ class _AudioMessageState extends State<AudioMessage>
                             _formatDuration(_position),
                             style: TextStyle(
                               fontSize: 10,
-                              color: widget.isMe ? Colors.white70 : AppTheme.zinc500,
+                              color: widget.isMe
+                                  ? (isDark ? AppTheme.slate950 : Colors.white70)
+                                  : (isDark ? AppTheme.slate400 : AppTheme.slate500),
                             ),
                           ),
                           Text(
                             _formatDuration(_duration),
                             style: TextStyle(
                               fontSize: 10,
-                              color: widget.isMe ? Colors.white70 : AppTheme.zinc500,
+                              color: widget.isMe
+                                  ? (isDark ? AppTheme.slate950 : Colors.white70)
+                                  : (isDark ? AppTheme.slate400 : AppTheme.slate500),
                             ),
                           ),
                         ],
@@ -3115,7 +3121,9 @@ class _AudioMessageState extends State<AudioMessage>
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                   decoration: BoxDecoration(
-                    color: widget.isMe ? Colors.white24 : AppTheme.zinc200,
+                    color: widget.isMe
+                        ? (isDark ? AppTheme.slate950.withOpacity(0.2) : Colors.white24)
+                        : (isDark ? AppTheme.slate700 : AppTheme.slate200),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
@@ -3123,7 +3131,9 @@ class _AudioMessageState extends State<AudioMessage>
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
-                      color: widget.isMe ? Colors.white : AppTheme.zinc700,
+                      color: widget.isMe
+                          ? (isDark ? AppTheme.slate950 : Colors.white)
+                          : (isDark ? AppTheme.slate200 : AppTheme.slate700),
                     ),
                   ),
                 ),

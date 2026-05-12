@@ -2070,10 +2070,6 @@ router.post('/channels/:channelId/files', requireAuth, asyncHandler(async (req, 
   let messageType = 'file';
   if (mimeType.startsWith('image/')) {
     messageType = 'image';
-  } else if (mimeType.startsWith('video/')) {
-    messageType = 'video';
-  } else if (mimeType.startsWith('audio/')) {
-    messageType = 'audio';
   }
 
   const { data: message, error: messageError } = await supabaseAdmin
