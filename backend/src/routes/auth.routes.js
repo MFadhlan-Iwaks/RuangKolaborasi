@@ -6,6 +6,7 @@ const { asyncHandler } = require('../middleware/asyncHandler');
 const router = express.Router();
 const PROFILE_SELECT = 'id, full_name, username, avatar_url, bio, status, created_at, updated_at';
 const MAX_AVATAR_URL_LENGTH = 3_000_000;
+const ALLOWED_PROFILE_STATUSES = new Set(['online', 'idle', 'dnd', 'offline']);
 
 function trimOptionalString(value, maxLength) {
   if (typeof value !== 'string') return undefined;
@@ -24,6 +25,11 @@ function normalizeAvatarUrl(value) {
   }
 
   return trimmed;
+}
+
+function normalizeProfileStatus(value) {
+  const status = String(value || '').trim();
+  return ALLOWED_PROFILE_STATUSES.has(status) ? status : undefined;
 }
 
 router.get('/me', requireAuth, asyncHandler(async (req, res) => {
@@ -77,6 +83,11 @@ router.post('/ensure-profile', requireAuth, asyncHandler(async (req, res) => {
     full_name: existingProfile?.full_name || fullName,
     username: existingProfile?.username || username
   };
+  const status = normalizeProfileStatus(req.body.status);
+
+  if (status) {
+    payload.status = status;
+  }
 
   if (existingProfile?.avatar_url || metadata.avatar_url || req.body.avatarUrl) {
     payload.avatar_url = existingProfile?.avatar_url || metadata.avatar_url || req.body.avatarUrl;
@@ -146,7 +157,7 @@ router.patch('/profile', requireAuth, asyncHandler(async (req, res) => {
 router.patch('/status', requireAuth, asyncHandler(async (req, res) => {
   const status = String(req.body.status || '').trim();
 
-  if (!['online', 'idle', 'dnd', 'offline'].includes(status)) {
+  if (!ALLOWED_PROFILE_STATUSES.has(status)) {
     return res.status(400).json({
       error: 'Bad Request',
       message: 'Invalid status'

@@ -23,6 +23,7 @@ import WorkspaceHeader from '@/components/workspace/WorkspaceHeader';
 import WorkspaceChatArea from '@/components/workspace/WorkspaceChatArea';
 import WorkspaceOverlays from '@/components/workspace/WorkspaceOverlays';
 import WorkspaceSkeleton from '@/components/workspace/WorkspaceSkeleton';
+import ConfirmDialog from '@/components/workspace/ConfirmDialog';
 import ToastStack from '@/components/ui/ToastStack';
 import { useGemini } from '@/hooks/useGemini';
 import { useDragDrop } from '@/hooks/useDragDrop';
@@ -60,6 +61,28 @@ import {
   toWorkspace,
 } from '@/lib/workspaceApi';
 
+type InviteListPayload = Pick<BootstrapResponse, 'incomingInvites' | 'outgoingInvites'>;
+type WorkspaceSyncPayload = {
+  kind: 'workspace' | 'channel' | 'membership';
+  action: 'created' | 'updated' | 'deleted' | 'removed' | 'role-updated';
+  workspaceId: string;
+  memberId?: string;
+  channelId?: string;
+};
+type WorkspacePresencePayload = {
+  userId: string;
+  name: string;
+  status: Status;
+  at: string;
+};
+
+function combineInviteLists(payload: InviteListPayload) {
+  return [
+    ...(payload.incomingInvites ?? []),
+    ...(payload.outgoingInvites ?? []),
+  ];
+}
+
 export default function WorkspacePage() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState('');
@@ -95,6 +118,7 @@ export default function WorkspacePage() {
   const [deletingMessage, setDeletingMessage] = useState<Message | null>(null);
   const [infoMessage, setInfoMessage] = useState<Message | null>(null);
   const [forwardingMessage, setForwardingMessage] = useState<Message | null>(null);
+  const [kickMemberTarget, setKickMemberTarget] = useState<TeamMember | null>(null);
   const [typingUser, setTypingUser] = useState('');
   const [showFilePanel, setShowFilePanel] = useState(true);
   const [fileCategory, setFileCategory] = useState<FileCategory>('all');
@@ -111,6 +135,8 @@ export default function WorkspacePage() {
     Record<string, { text: string; file?: File }>
   >({});
   const typingChannelRef = useRef<RealtimeChannel | null>(null);
+  const workspaceSyncChannelRef = useRef<RealtimeChannel | null>(null);
+  const workspacePresenceChannelRef = useRef<RealtimeChannel | null>(null);
   const typingStopTimeoutRef = useRef<number | null>(null);
   const lastTypingSentRef = useRef({ roomId: '', at: 0, isTyping: false });
   const messagesByWorkspaceRef = useRef(messagesByWorkspace);
@@ -221,10 +247,7 @@ export default function WorkspacePage() {
     setRoomsByWorkspace(nextRoomsByWorkspace);
     setMessagesByWorkspace(nextMessagesByWorkspace);
     setMembersByWorkspace(nextMembersByWorkspace);
-    setIncomingInvites([
-      ...(payload.incomingInvites ?? []),
-      ...(payload.outgoingInvites ?? []),
-    ]);
+    setIncomingInvites(combineInviteLists(payload));
     const nextActiveWorkspaceId =
       preferredWorkspaceId && nextWorkspaces.some((workspace) => workspace.id === preferredWorkspaceId)
         ? preferredWorkspaceId
@@ -237,6 +260,36 @@ export default function WorkspacePage() {
 
     setActiveWorkspaceId(nextActiveWorkspaceId);
     setActiveRoomId(nextActiveRoomId);
+  }, []);
+
+  const loadInvites = useCallback(async () => {
+    const payload = await apiFetch<InviteListPayload>('/api/workspaces/invites', {
+      accessToken: await getAccessToken(),
+    });
+
+    setIncomingInvites(combineInviteLists(payload));
+  }, []);
+
+  const refreshWorkspaceData = useCallback(async (
+    preferredWorkspaceId = activeWorkspaceId,
+    preferredRoomId = activeRoomId
+  ) => {
+    if (!currentUser) return;
+
+    await loadWorkspaceData(
+      currentUser,
+      await getAccessToken(),
+      preferredWorkspaceId,
+      preferredRoomId
+    );
+  }, [activeRoomId, activeWorkspaceId, currentUser, loadWorkspaceData]);
+
+  const publishWorkspaceSync = useCallback((payload: WorkspaceSyncPayload) => {
+    void workspaceSyncChannelRef.current?.send({
+      type: 'broadcast',
+      event: 'workspace-sync',
+      payload,
+    });
   }, []);
 
   useEffect(() => {
@@ -652,39 +705,43 @@ export default function WorkspacePage() {
           };
 
           if (!profile.id) return;
-          const displayName = profile.username || profile.full_name || 'Anggota';
-          const initial = makeInitials(displayName).slice(0, 2) || 'U';
+          const hasAvatarUrl = Object.prototype.hasOwnProperty.call(profile, 'avatar_url');
 
           if (profile.id === currentUserId) {
-            setCurrentUser((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    name: displayName,
-                    initial,
-                    photoUrl: profile.avatar_url || undefined,
-                    status: (profile.status as Status | undefined) || prev.status,
-                  }
-                : prev
-            );
+            setCurrentUser((prev) => {
+              if (!prev) return prev;
+
+              const displayName = profile.username || profile.full_name || prev.name;
+              const initial = makeInitials(displayName).slice(0, 2) || prev.initial;
+
+              return {
+                ...prev,
+                name: displayName,
+                initial,
+                photoUrl: hasAvatarUrl ? profile.avatar_url || undefined : prev.photoUrl,
+                status: (profile.status as Status | undefined) || prev.status,
+              };
+            });
           }
 
           setMembersByWorkspace((prev) =>
             Object.fromEntries(
               Object.entries(prev).map(([workspaceId, workspaceMembers]) => [
                 workspaceId,
-                workspaceMembers.map((member) =>
-                  member.id === profile.id
-                    ? {
-                        ...member,
-                        name: displayName,
-                        photoUrl: profile.avatar_url || undefined,
-                        profileStatus:
-                          (profile.status as Status | undefined) ||
-                          member.profileStatus,
-                      }
-                    : member
-                ),
+                workspaceMembers.map((member) => {
+                  if (member.id !== profile.id) return member;
+
+                  const displayName = profile.username || profile.full_name || member.name;
+
+                  return {
+                    ...member,
+                    name: displayName,
+                    photoUrl: hasAvatarUrl ? profile.avatar_url || undefined : member.photoUrl,
+                    profileStatus:
+                      (profile.status as Status | undefined) ||
+                      member.profileStatus,
+                  };
+                }),
               ])
             )
           );
@@ -695,18 +752,24 @@ export default function WorkspacePage() {
                 Object.fromEntries(
                   Object.entries(workspaceMessages).map(([roomId, roomMessages]) => [
                     roomId,
-                    roomMessages.map((message) =>
-                      message.senderId === profile.id
-                        ? {
-                            ...message,
-                            user:
-                              profile.id === currentUserId
-                                ? `${displayName} (Kamu)`
-                                : displayName,
-                            photoUrl: profile.avatar_url || undefined,
-                          }
-                        : message
-                    ),
+                    roomMessages.map((message) => {
+                      if (message.senderId !== profile.id) return message;
+
+                      const displayName =
+                        profile.username ||
+                        profile.full_name ||
+                        message.user.replace(/\s+\(Kamu\)$/i, '') ||
+                        'Anggota';
+
+                      return {
+                        ...message,
+                        user:
+                          profile.id === currentUserId
+                            ? `${displayName} (Kamu)`
+                            : displayName,
+                        photoUrl: hasAvatarUrl ? profile.avatar_url || undefined : message.photoUrl,
+                      };
+                    }),
                   ])
                 ),
               ])
@@ -722,11 +785,67 @@ export default function WorkspacePage() {
   }, [currentUserId]);
 
   useEffect(() => {
+    if (!currentUserId) return undefined;
+
+    const supabase = getSupabaseBrowserClient();
+    let refreshTimeout: number | null = null;
+
+    const scheduleInviteRefresh = () => {
+      if (refreshTimeout) {
+        window.clearTimeout(refreshTimeout);
+      }
+
+      refreshTimeout = window.setTimeout(() => {
+        refreshTimeout = null;
+        loadInvites().catch((error) => {
+          console.error('Gagal memuat ulang invite:', getReadableError(error), error);
+        });
+      }, 250);
+    };
+
+    const channel = supabase
+      .channel(`workspace-invites:${currentUserId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'workspace_invites',
+        },
+        scheduleInviteRefresh
+      )
+      .subscribe();
+
+    return () => {
+      if (refreshTimeout) {
+        window.clearTimeout(refreshTimeout);
+      }
+
+      supabase.removeChannel(channel);
+    };
+  }, [currentUserId, loadInvites]);
+
+  useEffect(() => {
     if (!activeWorkspaceId || !currentUser) return undefined;
 
     const supabase = getSupabaseBrowserClient();
+    let refreshTimeout: number | null = null;
+
+    const scheduleWorkspaceRefresh = () => {
+      if (refreshTimeout) {
+        window.clearTimeout(refreshTimeout);
+      }
+
+      refreshTimeout = window.setTimeout(() => {
+        refreshTimeout = null;
+        refreshWorkspaceData(activeWorkspaceId, activeRoomId).catch((error) => {
+          console.error('Gagal memuat ulang workspace:', getReadableError(error), error);
+        });
+      }, 250);
+    };
+
     const channel = supabase
-      .channel(`workspace-members:${activeWorkspaceId}`)
+      .channel(`workspace-model:${activeWorkspaceId}`)
       .on(
         'postgres_changes',
         {
@@ -735,25 +854,169 @@ export default function WorkspacePage() {
           table: 'workspace_members',
           filter: `workspace_id=eq.${activeWorkspaceId}`,
         },
-        async () => {
-          try {
-            await loadWorkspaceData(
-              currentUser,
-              await getAccessToken(),
-              activeWorkspaceId,
-              activeRoomId
-            );
-          } catch (error) {
-            console.error('Gagal memuat ulang anggota workspace:', getReadableError(error), error);
-          }
-        }
+        scheduleWorkspaceRefresh
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'channels',
+          filter: `workspace_id=eq.${activeWorkspaceId}`,
+        },
+        scheduleWorkspaceRefresh
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'workspaces',
+          filter: `id=eq.${activeWorkspaceId}`,
+        },
+        scheduleWorkspaceRefresh
       )
       .subscribe();
 
     return () => {
+      if (refreshTimeout) {
+        window.clearTimeout(refreshTimeout);
+      }
+
       supabase.removeChannel(channel);
     };
-  }, [activeRoomId, activeWorkspaceId, currentUser, loadWorkspaceData]);
+  }, [activeRoomId, activeWorkspaceId, currentUser, refreshWorkspaceData]);
+
+  useEffect(() => {
+    if (!activeWorkspaceId || !currentUser) return undefined;
+
+    const supabase = getSupabaseBrowserClient();
+    const channel = supabase
+      .channel(`workspace-sync:${activeWorkspaceId}`, {
+        config: {
+          broadcast: { self: false },
+        },
+      })
+      .on('broadcast', { event: 'workspace-sync' }, ({ payload }) => {
+        const syncPayload = payload as WorkspaceSyncPayload;
+
+        if (syncPayload.workspaceId !== activeWorkspaceId) return;
+
+        if (
+          syncPayload.kind === 'membership' &&
+          syncPayload.action === 'removed' &&
+          syncPayload.memberId === currentUserId
+        ) {
+          setShowWorkspaceSettings(false);
+          setShowInviteModal(false);
+          setKickMemberTarget(null);
+          setDraftFile(null);
+          setReplyToMessage(null);
+          setSearchQuery('');
+          clearSummary();
+          showToast({
+            type: 'info',
+            title: 'Kamu dikeluarkan dari grup',
+          });
+          refreshWorkspaceData('', '').catch((error) => {
+            console.error('Gagal memuat ulang workspace setelah kick:', getReadableError(error), error);
+          });
+          return;
+        }
+
+        refreshWorkspaceData(activeWorkspaceId, activeRoomId).catch((error) => {
+          console.error('Gagal sinkronisasi workspace:', getReadableError(error), error);
+        });
+      })
+      .subscribe();
+
+    workspaceSyncChannelRef.current = channel;
+
+    return () => {
+      if (workspaceSyncChannelRef.current === channel) {
+        workspaceSyncChannelRef.current = null;
+      }
+
+      supabase.removeChannel(channel);
+    };
+  }, [
+    activeRoomId,
+    activeWorkspaceId,
+    clearSummary,
+    currentUser,
+    currentUserId,
+    refreshWorkspaceData,
+  ]);
+
+  useEffect(() => {
+    if (!activeWorkspaceId || !currentUserId) return undefined;
+
+    const supabase = getSupabaseBrowserClient();
+    const channel = supabase.channel(`workspace-presence:${activeWorkspaceId}`, {
+      config: {
+        presence: {
+          key: currentUserId,
+        },
+      },
+    });
+
+    const applyPresenceState = () => {
+      const presenceState = channel.presenceState() as Record<
+        string,
+        WorkspacePresencePayload[]
+      >;
+      const statusByUser = new Map<string, Status>();
+
+      for (const [presenceKey, presences] of Object.entries(presenceState)) {
+        const latestPresence = presences.at(-1);
+        const userId = latestPresence?.userId || presenceKey;
+        const status = latestPresence?.status || 'online';
+
+        statusByUser.set(userId, status);
+      }
+
+      setMembersByWorkspace((prev) => ({
+        ...prev,
+        [activeWorkspaceId]: (prev[activeWorkspaceId] ?? []).map((member) =>
+          member.status === 'active'
+            ? {
+                ...member,
+                profileStatus: statusByUser.get(member.id) ?? 'offline',
+              }
+            : member
+        ),
+      }));
+    };
+
+    channel
+      .on('presence', { event: 'sync' }, applyPresenceState)
+      .subscribe((status) => {
+        if (status !== 'SUBSCRIBED') return;
+
+        void channel.track({
+          userId: currentUserId,
+          name: currentUserName,
+          status: currentUserStatus,
+          at: new Date().toISOString(),
+        } satisfies WorkspacePresencePayload);
+      });
+
+    workspacePresenceChannelRef.current = channel;
+
+    return () => {
+      if (workspacePresenceChannelRef.current === channel) {
+        workspacePresenceChannelRef.current = null;
+      }
+
+      void channel.untrack();
+      supabase.removeChannel(channel);
+    };
+  }, [
+    activeWorkspaceId,
+    currentUserId,
+    currentUserName,
+    currentUserStatus,
+  ]);
 
   const handleTypingChange = useCallback(
     (isTyping: boolean) => {
@@ -1285,13 +1548,19 @@ export default function WorkspacePage() {
         [newRoom.id]: [],
       },
     }));
-      setActiveRoomId(newRoom.id);
-      setShowChannelModal(false);
-      showToast({
-        type: 'success',
-        title: 'Channel dibuat',
-        description: `#${newRoom.name} siap dipakai.`,
-      });
+    publishWorkspaceSync({
+      kind: 'channel',
+      action: 'created',
+      workspaceId: activeWorkspaceId,
+      channelId: newRoom.id,
+    });
+    setActiveRoomId(newRoom.id);
+    setShowChannelModal(false);
+    showToast({
+      type: 'success',
+      title: 'Channel dibuat',
+      description: `#${newRoom.name} siap dipakai.`,
+    });
   }
 
   async function createWorkspaceInBackend(name: string, description: string) {
@@ -1755,6 +2024,11 @@ export default function WorkspacePage() {
             : item
         )
       );
+      publishWorkspaceSync({
+        kind: 'workspace',
+        action: 'updated',
+        workspaceId: activeWorkspaceId,
+      });
       setShowWorkspaceSettings(false);
       showToast({
         type: 'success',
@@ -1804,6 +2078,12 @@ export default function WorkspacePage() {
         title: 'Role anggota diperbarui',
         description: `${nextMember.name} sekarang ${nextMember.role}`,
       });
+      publishWorkspaceSync({
+        kind: 'membership',
+        action: 'role-updated',
+        workspaceId: activeWorkspaceId,
+        memberId,
+      });
     } catch (error) {
       showActionError('Gagal mengubah role anggota', error);
     } finally {
@@ -1812,12 +2092,16 @@ export default function WorkspacePage() {
   }
 
   async function handleKickMember(member: TeamMember) {
-    const confirmed = window.confirm(`Keluarkan ${member.name} dari grup ini?`);
-    if (!confirmed) return;
+    setKickMemberTarget(member);
+  }
+
+  async function handleConfirmKickMember() {
+    if (!kickMemberTarget) return;
+    const targetMember = kickMemberTarget;
 
     try {
       setBusyActions((prev) => ({ ...prev, manageMember: true }));
-      await apiFetch(`/api/workspaces/${activeWorkspaceId}/members/${member.id}`, {
+      await apiFetch(`/api/workspaces/${activeWorkspaceId}/members/${targetMember.id}`, {
         method: 'DELETE',
         accessToken: await getAccessToken(),
       });
@@ -1825,14 +2109,21 @@ export default function WorkspacePage() {
       setMembersByWorkspace((prev) => ({
         ...prev,
         [activeWorkspaceId]: (prev[activeWorkspaceId] ?? []).filter(
-          (item) => item.id !== member.id
+          (item) => item.id !== targetMember.id
         ),
       }));
+      publishWorkspaceSync({
+        kind: 'membership',
+        action: 'removed',
+        workspaceId: activeWorkspaceId,
+        memberId: targetMember.id,
+      });
       showToast({
         type: 'success',
         title: 'Anggota dikeluarkan',
-        description: member.name,
+        description: targetMember.name,
       });
+      setKickMemberTarget(null);
     } catch (error) {
       showActionError('Gagal mengeluarkan anggota', error);
     } finally {
@@ -1847,6 +2138,12 @@ export default function WorkspacePage() {
       await apiFetch(`/api/workspaces/${activeWorkspaceId}/leave`, {
         method: 'DELETE',
         accessToken,
+      });
+      publishWorkspaceSync({
+        kind: 'membership',
+        action: 'removed',
+        workspaceId: activeWorkspaceId,
+        memberId: currentUserId,
       });
 
       const remainingWorkspaces = workspaces.filter(
@@ -1928,6 +2225,12 @@ export default function WorkspacePage() {
           room.id === roomId ? { ...room, ...nextRoom } : room
         )
       );
+      publishWorkspaceSync({
+        kind: 'channel',
+        action: 'updated',
+        workspaceId: activeWorkspaceId,
+        channelId: roomId,
+      });
     } catch (error) {
       showActionError('Gagal mengubah favorit channel', error);
     }
@@ -1955,6 +2258,12 @@ export default function WorkspacePage() {
           room.id === activeRoom.id ? { ...room, ...nextRoom } : room
         )
       );
+      publishWorkspaceSync({
+        kind: 'channel',
+        action: 'updated',
+        workspaceId: activeWorkspaceId,
+        channelId: activeRoom.id,
+      });
       setShowChannelSettings(false);
       showToast({
         type: 'success',
@@ -1997,6 +2306,12 @@ export default function WorkspacePage() {
           room.id === activeRoom.id ? { ...room, ...nextRoom } : room
         )
       );
+      publishWorkspaceSync({
+        kind: 'channel',
+        action: 'updated',
+        workspaceId: activeWorkspaceId,
+        channelId: activeRoom.id,
+      });
       setActiveRoomId(nextActiveRoomId);
       setShowChannelSettings(false);
       showToast({
@@ -2033,6 +2348,12 @@ export default function WorkspacePage() {
           room.id === roomId ? { ...room, ...nextRoom } : room
         )
       );
+      publishWorkspaceSync({
+        kind: 'channel',
+        action: 'updated',
+        workspaceId: activeWorkspaceId,
+        channelId: roomId,
+      });
       setActiveRoomId(roomId);
       showToast({
         type: 'success',
@@ -2087,6 +2408,12 @@ export default function WorkspacePage() {
       setDeleteConfirmRoomId('');
       setShowDeleteChannelModal(false);
       clearSummary();
+      publishWorkspaceSync({
+        kind: 'channel',
+        action: 'deleted',
+        workspaceId: activeWorkspaceId,
+        channelId: deleteConfirmRoomId,
+      });
       showToast({
         type: 'success',
         title: 'Ruang diskusi dihapus',
@@ -2515,6 +2842,22 @@ export default function WorkspacePage() {
           onDeclineInvite={handleDeclineInviteById}
           onInviteMessageClear={() => setInviteMessage('')}
           onCloseSummary={clearSummary}
+        />
+        <ConfirmDialog
+          open={!!kickMemberTarget}
+          title="Keluarkan Anggota"
+          description={
+            kickMemberTarget
+              ? `Kamu akan mengeluarkan ${kickMemberTarget.name} dari grup ini.`
+              : ''
+          }
+          detail="Anggota yang dikeluarkan tidak bisa lagi melihat ruang diskusi dan file di workspace ini sampai diundang kembali."
+          confirmLabel="Keluarkan"
+          isLoading={!!busyActions.manageMember}
+          onClose={() => {
+            if (!busyActions.manageMember) setKickMemberTarget(null);
+          }}
+          onConfirm={handleConfirmKickMember}
         />
         <ToastStack
           items={toasts}
