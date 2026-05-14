@@ -222,48 +222,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             ),
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  _buildDivider(isDark),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: OutlinedButton(
-                      onPressed: authState.isLoading
-                          ? null
-                          : _handleGoogleLogin,
-                      style: OutlinedButton.styleFrom(
-                        side: BorderSide(
-                          color: isDark
-                              ? AppTheme.slate700
-                              : AppTheme.slate200,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.g_mobiledata, size: 26, color: primaryColor),
-                          const SizedBox(width: 10),
-                          Flexible(
-                            child: Text(
-                              _isRegisterMode
-                                  ? 'Daftar dengan Google'
-                                  : 'Masuk dengan Google',
-                              style: TextStyle(
-                                color: isDark
-                                    ? AppTheme.slate200
-                                    : AppTheme.slate700,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
                   const SizedBox(height: 32),
                   Center(
                     child: Wrap(
