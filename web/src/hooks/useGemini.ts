@@ -1,7 +1,7 @@
 // src/hooks/useGemini.ts
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Message } from '@/types';
 import { apiFetch } from '@/lib/apiClient';
 import { getSupabaseBrowserClient } from '@/lib/supabaseClient';
@@ -55,7 +55,7 @@ export function useGemini() {
   const [isPolishing, setIsPolishing] = useState(false);
   const [summaryResult, setSummaryResult] = useState('');
 
-  const summarize = async (messages: Message[], channelId?: string) => {
+  const summarize = useCallback(async (messages: Message[], channelId?: string) => {
     if (messages.length === 0 && !channelId) return;
     const readableMessages = messages
       .filter((message) => !message.deletedForEveryone)
@@ -97,9 +97,9 @@ export function useGemini() {
     } finally {
       setIsSummarizing(false);
     }
-  };
+  }, []);
 
-  const polishText = async (text: string): Promise<string | null> => {
+  const polishText = useCallback(async (text: string): Promise<string | null> => {
     setIsPolishing(true);
     try {
       const accessToken = await getAccessToken();
@@ -118,9 +118,9 @@ export function useGemini() {
     } finally {
       setIsPolishing(false);
     }
-  };
+  }, []);
 
-  const clearSummary = () => setSummaryResult('');
+  const clearSummary = useCallback(() => setSummaryResult(''), []);
 
   return {
     summarize,

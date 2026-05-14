@@ -311,6 +311,7 @@ export async function ensureProfile(
     body: JSON.stringify({
       fullName: currentUser.name,
       username: currentUser.email.split('@')[0],
+      status: 'online',
     }),
   });
 }
